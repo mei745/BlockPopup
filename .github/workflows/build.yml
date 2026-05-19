@@ -1,26 +1,24 @@
 name: Build iOS Tweak
-
-on:
-  push:
-    branches: [ main ]
-  workflow_dispatch:
-
+on: [push, workflow_dispatch]
 jobs:
   build:
     runs-on: macos-latest
-
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
       - name: Setup Theos & Dependencies
         run: |
-          brew install ldid dpkg perl
+          # 安装依赖（含p7zip用于解压.7z）
+          brew install ldid dpkg perl p7zip
+          
           export THEOS=$HOME/theos
           git clone --depth 1 https://github.com/theos/theos.git $THEOS
-          # 解压ZIP格式的SDK包
+          
+          # 解压.7z格式的SDK包
           mkdir -p $THEOS/sdks
-          unzip ./sdks/iPhoneOS16.5.sdk.zip -d $THEOS/sdks
+          7z x ./sdks/iPhoneOS16.5.sdk.zip.7z -o$THEOS/sdks
+          
           echo "THEOS=$THEOS" >> $GITHUB_ENV
           echo "$THEOS/bin" >> $GITHUB_PATH
 
