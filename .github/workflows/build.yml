@@ -15,14 +15,9 @@ jobs:
 
       - name: Setup Theos
         run: |
-          brew install ldid dpkg xz
+          brew install ldid dpkg
           export THEOS=$HOME/theos
           git clone --depth 1 https://github.com/theos/theos.git $THEOS
-          rm -rf $THEOS/lib
-          git clone --depth 1 https://github.com/theos/lib.git $THEOS/lib
-          curl -LO https://raw.githubusercontent.com/theos/theos/master/bin/dm.pl
-          chmod +x dm.pl
-          sudo mv dm.pl /usr/local/bin/
           echo "THEOS=$THEOS" >> $GITHUB_ENV
           echo "$THEOS/bin" >> $GITHUB_PATH
 
