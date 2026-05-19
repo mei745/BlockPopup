@@ -1,8 +1,18 @@
+ARCHS = arm64 arm64e
+TARGET = iphone:clang:16.5:14.0
+
+THEOS_PACKAGE_DIR_NAME = debs
+THEOS_PACKAGE_MAKEFILE = package.mk  # 解决::和:的冲突
+
+include $(THEOS)/makefiles/common.mk
+
 TWEAK_NAME = BlockPopup
 BlockPopup_FILES = Tweak.xm
 BlockPopup_FRAMEWORKS = UIKit
 # 编译为独立动态库（不依赖Theos默认路径）
 BlockPopup_LDFLAGS = -dynamiclib -install_name @rpath/$(TWEAK_NAME).dylib
+
+include $(THEOS_MAKE_PATH)/tweak.mk
 
 # 目标1：编译动态库（用于后续注入）
 build-dylib: clean all
@@ -29,6 +39,3 @@ extract-dylib: package
 	dpkg-deb -x $(TWEAK_NAME).deb ./deb-extract
 	cp ./deb-extract/Library/MobileSubstrate/DynamicLibraries/$(TWEAK_NAME).dylib ./
 	rm -rf ./deb-extract
-
-include $(THEOS)/makefiles/common.mk
-include $(THEOS_MAKE_PATH)/tweak.mk
