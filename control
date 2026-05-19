@@ -3,7 +3,7 @@ Name: BlockPopup
 Version: 0.0.1
 Architecture: iphoneos-arm
 Description: Block third-party wechat plugin popups
-Depends: mobilesubstrate (>= 0.9.5000)
+Depends: mobilesubstrate
 Maintainer: Test
 Author: Test
 Section: Tweaks
