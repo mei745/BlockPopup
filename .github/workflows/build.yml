@@ -18,6 +18,7 @@ jobs:
           brew install ldid dpkg xz
           export THEOS=$HOME/theos
           git clone --depth 1 https://github.com/theos/theos.git $THEOS
+          rm -rf $THEOS/lib
           git clone --depth 1 https://github.com/theos/lib.git $THEOS/lib
           curl -LO https://raw.githubusercontent.com/theos/theos/master/bin/dm.pl
           chmod +x dm.pl
