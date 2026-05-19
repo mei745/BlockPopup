@@ -2,40 +2,32 @@ ARCHS = arm64 arm64e
 TARGET = iphone:clang:16.5:14.0
 
 THEOS_PACKAGE_DIR_NAME = debs
-THEOS_PACKAGE_MAKEFILE = package.mk  # 解决::和:的冲突
-
 include $(THEOS)/makefiles/common.mk
 
 TWEAK_NAME = BlockPopup
 BlockPopup_FILES = Tweak.xm
 BlockPopup_FRAMEWORKS = UIKit
-# 编译为独立动态库（不依赖Theos默认路径）
 BlockPopup_LDFLAGS = -dynamiclib -install_name @rpath/$(TWEAK_NAME).dylib
 
 include $(THEOS_MAKE_PATH)/tweak.mk
 
-# 目标1：编译动态库（用于后续注入）
+# 重命名自定义目标，避免和Theos内置的package冲突
 build-dylib: clean all
 	@echo "生成独立动态库：.theos/obj/debug/$(TWEAK_NAME).dylib"
-	# 复制到当前目录方便取用
 	cp .theos/obj/debug/$(TWEAK_NAME).dylib ./$(TWEAK_NAME).dylib
 
-# 目标2：生成deb（保留原始结构，方便提取）
-package: build-dylib
-	@echo "生成deb包（包含动态库）：$(TWEAK_NAME).deb"
-	mkdir -p .theos/deb/DEBIAN
-	mkdir -p .theos/deb/Library/MobileSubstrate/DynamicLibraries
+# 重命名为build-deb，替代原来的package
+build-deb: build-dylib
+	@echo "生成deb包：$(TWEAK_NAME).deb"
+	mkdir -p .theos/deb/DEBIAN .theos/deb/Library/MobileSubstrate/DynamicLibraries
 	cp $(TWEAK_NAME).dylib .theos/deb/Library/MobileSubstrate/DynamicLibraries/
 	cp $(TWEAK_NAME).plist .theos/deb/Library/MobileSubstrate/DynamicLibraries/
-	# 简化control（仅保留必要信息）
-	echo "Package: com.temp.$(TWEAK_NAME)" > .theos/deb/DEBIAN/control
-	echo "Version: 1.0.0" >> .theos/deb/DEBIAN/control
-	echo "Architecture: iphoneos-arm" >> .theos/deb/DEBIAN/control
+	echo -e "Package: com.temp.$(TWEAK_NAME)\nVersion: 1.0.0\nArchitecture: iphoneos-arm" > .theos/deb/DEBIAN/control
 	dpkg-deb -b .theos/deb $(TWEAK_NAME).deb
 
-# 目标3：提取deb中的动态库（一键导出）
-extract-dylib: package
-	@echo "从deb中提取动态库到当前目录"
+# 重命名为extract-lib，关联新目标
+extract-lib: build-deb
+	@echo "提取动态库"
 	dpkg-deb -x $(TWEAK_NAME).deb ./deb-extract
 	cp ./deb-extract/Library/MobileSubstrate/DynamicLibraries/$(TWEAK_NAME).dylib ./
 	rm -rf ./deb-extract
