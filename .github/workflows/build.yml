@@ -15,28 +15,23 @@ jobs:
 
       - name: Setup Theos & Dependencies
         run: |
-          # 安装依赖工具
           brew install ldid dpkg perl
-          # 克隆Theos
           export THEOS=$HOME/theos
           git clone --depth 1 https://github.com/theos/theos.git $THEOS
-          # 下载iOS SDK（无错误参数）
           mkdir -p $THEOS/sdks
-          curl -L https://theos.sirb.workers.dev/sdks/iPhoneOS16.0.sdk.tar.xz -o $THEOS/sdks/iPhoneOS16.0.sdk.tar.xz
+          curl -L "https://theos.sirb.workers.dev/sdks/iPhoneOS16.0.sdk.tar.xz" --output "$THEOS/sdks/iPhoneOS16.0.sdk.tar.xz"
           tar -xJf $THEOS/sdks/iPhoneOS16.0.sdk.tar.xz -C $THEOS/sdks
-          # 配置环境变量
           echo "THEOS=$THEOS" >> $GITHUB_ENV
           echo "$THEOS/bin" >> $GITHUB_PATH
 
       - name: Build package
         run: |
-          make clean
           make package
-          mkdir -p ./output
-          cp .theos/_/*.deb ./output/
+        env:
+          THEOS: ${{ env.THEOS }}
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: BlockPopup.deb
-          path: ./output/*.deb
+          path: packages/*.deb
