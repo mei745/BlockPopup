@@ -1,9 +1,5 @@
 name: Build iOS Tweak
-on:
-  push:
-    branches: [ main ]
-  workflow_dispatch:
-
+on: [push, workflow_dispatch]
 jobs:
   build:
     runs-on: macos-latest
@@ -13,26 +9,20 @@ jobs:
 
       - name: Setup Theos & Dependencies
         run: |
-          # 安装依赖（含p7zip解压.7z）
           brew install ldid dpkg perl p7zip
-          
-          # 配置Theos
           export THEOS=$HOME/theos
           git clone --depth 1 https://github.com/theos/theos.git $THEOS
           
-          # 解压SDK（匹配你sdks目录里的实际文件名）
-          mkdir -p $THEOS/sdks
-          7z x ./sdks/iPhoneOS16.5.sdk.zip.7z -o$THEOS/sdks
+          # 强制解压到指定目录，确保SDK名称匹配
+          mkdir -p $THEOS/sdks/iPhoneOS16.5.sdk
+          7z x ./sdks/iPhoneOS16.5.sdk.zip.7z -o$THEOS/sdks/iPhoneOS16.5.sdk
           
-          # 配置环境变量
           echo "THEOS=$THEOS" >> $GITHUB_ENV
           echo "$THEOS/bin" >> $GITHUB_PATH
 
       - name: Build Tweak & Deb
         run: |
-          # 调用重命名后的build-deb目标
           make build-deb
-          # 准备输出目录
           mkdir -p ./output
           cp BlockPopup.deb ./output/
 
