@@ -15,7 +15,7 @@ jobs:
 
       - name: Setup Theos
         run: |
-          brew install darwin cc-tool ldid dpkg xz
+          brew install ldid dpkg xz
           export THEOS=$HOME/theos
           git clone --depth 1 https://github.com/theos/theos.git $THEOS
           echo "THEOS=$THEOS" >> $GITHUB_ENV
