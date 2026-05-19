@@ -1,15 +1,4 @@
 #import <UIKit/UIKit.h>
-#import <SpringBoard/SpringBoard.h>
-#import <CaptainHook/CaptainHook.h>
-
-// 拦截所有 UIAlertController 弹窗
-CHHook(UIAlertController, presentViewController:animated:completion:);
-
-// 拦截 UIActionSheet 弹窗
-CHHook(UIActionSheet, showInView:);
-
-// 拦截自定义弹窗（检测可疑窗口）
-CHHook(UIWindow, makeKeyAndVisible);
 
 %hook UIAlertController
 
@@ -17,19 +6,16 @@ CHHook(UIWindow, makeKeyAndVisible);
                       animated:(BOOL)flag 
                     completion:(void (^)(void))completion {
     
-    // 获取弹窗标题和消息
     NSString *title = self.title;
     NSString *message = self.message;
     
-    // 检测第三方插件弹窗关键词
     BOOL shouldBlock = NO;
     
     if (title || message) {
         NSArray *blockKeywords = @[
             @"激活", @"授权", @"激活码", @"注册", @"正版", @"正版验证",
-            @"插件", @"license", @"license key", @"activation",
-            @"key", @"keygen", @"crack", @"破解", @"warning",
-            @"警告", @"提示", @"注意", @"弹窗", @"弹窗提示"
+            @"插件", @"license", @"activation", @"key", @"破解",
+            @"警告", @"提示"
         ];
         
         NSString *combined = [NSString stringWithFormat:@"%@ %@", 
@@ -44,7 +30,6 @@ CHHook(UIWindow, makeKeyAndVisible);
     }
     
     if (shouldBlock) {
-        // 屏蔽弹窗 - 不显示
         NSLog(@"[BlockPopup] Blocked popup - Title: %@", title);
         return;
     }
@@ -80,9 +65,6 @@ CHHook(UIWindow, makeKeyAndVisible);
 %hook UIWindow
 
 - (void)makeKeyAndVisible {
-    // 检查是否是可疑的自定义弹窗窗口
-    // 某些第三方插件使用独立的 UIWindow
-    
     UIViewController *rootVC = self.rootViewController;
     if (rootVC) {
         NSString *vcName = NSStringFromClass([rootVC class]);
