@@ -13,23 +13,31 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup Theos
+      - name: Setup Theos & Dependencies
         run: |
+          # 安装依赖工具
           brew install ldid dpkg perl
+          # 克隆Theos
           export THEOS=$HOME/theos
           git clone --depth 1 https://github.com/theos/theos.git $THEOS
-          curl -L https://raw.githubusercontent.com/theos/theos/master/bin/dm.pl -o $THEOS/bin/dm.pl
-          chmod +x $THEOS/bin/dm.pl
+          # 下载iOS SDK（这里用iOS 15.0，可根据需要替换版本）
+          mkdir -p $THEOS/sdks
+          curl -L https://github.com/theos/sdks/raw/master/iPhoneOS15.0.sdk.tar.xz -o $THEOS/sdks/iPhoneOS15.0.sdk.tar.xz
+          tar -xJf $THEOS/sdks/iPhoneOS15.0.sdk.tar.xz -C $THEOS/sdks
+          # 配置环境变量
           echo "THEOS=$THEOS" >> $GITHUB_ENV
           echo "$THEOS/bin" >> $GITHUB_PATH
 
       - name: Build package
-        run: make package
-        env:
-          THEOS: ${{ env.THEOS }}
+        run: |
+          make clean
+          make package # Theos会将deb包生成到.theos/_/目录
+          # 把deb包复制到易获取的路径
+          mkdir -p ./output
+          cp .theos/_/*.deb ./output/
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: BlockPopup.deb
-          path: packages/*.deb
+          path: ./output/*.deb
