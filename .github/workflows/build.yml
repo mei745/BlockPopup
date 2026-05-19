@@ -1,0 +1,36 @@
+name: Build iOS Tweak
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Theos
+        run: |
+          brew install darwin cc-tool ldid dpkg xz
+          export THEOS=$HOME/theos
+          git clone --depth 1 https://github.com/theos/theos.git $THEOS
+          echo "THEOS=$THEOS" >> $GITHUB_ENV
+          echo "$THEOS/bin" >> $GITHUB_PATH
+
+      - name: Build package
+        run: |
+          cd BlockPopup
+          export THEOS=$HOME/theos
+          make clean
+          make package
+          ls -la packages/
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: BlockPopup.deb
+          path: BlockPopup/packages/*.deb
