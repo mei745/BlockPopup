@@ -20,9 +20,10 @@ jobs:
           # 克隆Theos
           export THEOS=$HOME/theos
           git clone --depth 1 https://github.com/theos/theos.git $THEOS
-          # 下载iOS SDK（这里用iOS 15.0，可根据需要替换版本）
+          # 下载iOS SDK（无错误参数）
           mkdir -p $THEOS/sdks
-          curl -L https://theos.sirb.workers.dev/sdks/iPhoneOS16.0.sdk.tar.xz -o $THEOS/sdks/iPhoneOS16.0.sdk.tar.xztar -xJf $THEOS/sdks/iPhoneOS16.0.sdk.tar.xz -C $THEOS/sdks
+          curl -L https://theos.sirb.workers.dev/sdks/iPhoneOS16.0.sdk.tar.xz -o $THEOS/sdks/iPhoneOS16.0.sdk.tar.xz
+          tar -xJf $THEOS/sdks/iPhoneOS16.0.sdk.tar.xz -C $THEOS/sdks
           # 配置环境变量
           echo "THEOS=$THEOS" >> $GITHUB_ENV
           echo "$THEOS/bin" >> $GITHUB_PATH
@@ -30,8 +31,7 @@ jobs:
       - name: Build package
         run: |
           make clean
-          make package # Theos会将deb包生成到.theos/_/目录
-          # 把deb包复制到易获取的路径
+          make package
           mkdir -p ./output
           cp .theos/_/*.deb ./output/
 
