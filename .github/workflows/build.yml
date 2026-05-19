@@ -16,10 +16,7 @@ jobs:
       - name: Setup Theos
         run: |
           brew install ldid dpkg
-          export THEOS=$HOME/theos
-          git clone --depth 1 https://github.com/theos/theos.git $THEOS
-          echo "THEOS=$THEOS" >> $GITHUB_ENV
-          echo "$THEOS/bin" >> $GITHUB_PATH
+          bash -c "$(curl -fsSL https://raw.githubusercontent.com/theos/theos/master/bin/install-theos)"
 
       - name: Build package
         run: |
