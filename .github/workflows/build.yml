@@ -7,15 +7,22 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Setup Theos (Auto SDK)
+      - name: Setup Theos + 16.5 SDK
         run: |
           # 安装依赖
-          brew install ldid dpkg perl
+          brew install ldid dpkg perl curl
           
-          # 安装Theos并自动下载SDK
+          # 配置Theos
           export THEOS=$HOME/theos
           git clone --depth 1 https://github.com/theos/theos.git $THEOS
-          $THEOS/bin/update-theos  # 自动补全依赖+SDK
+          
+          # 手动下载iPhoneOS16.5.sdk到Theos的sdks目录
+          mkdir -p $THEOS/sdks
+          curl -L "https://github.com/theos/sdks/raw/master/iPhoneOS16.5.sdk.tar.xz" -o $THEOS/sdks/iPhoneOS16.5.sdk.tar.xz
+          tar -xJf $THEOS/sdks/iPhoneOS16.5.sdk.tar.xz -C $THEOS/sdks
+          
+          # 补全Theos依赖
+          $THEOS/bin/update-theos
 
       - name: Build Tweak
         run: |
