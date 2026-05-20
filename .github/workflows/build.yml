@@ -1,37 +1,16 @@
-name: Build iOS Tweak
+name: Build Tweak
 on: [push, workflow_dispatch]
 jobs:
   build:
     runs-on: macos-latest
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Setup Theos + 16.5 SDK
-        run: |
-          # 安装依赖
-          brew install ldid dpkg perl curl
-          
-          # 配置Theos
-          export THEOS=$HOME/theos
-          git clone --depth 1 https://github.com/theos/theos.git $THEOS
-          
-          # 手动下载iPhoneOS16.5.sdk到Theos的sdks目录
-          mkdir -p $THEOS/sdks
-          curl -L "https://github.com/theos/sdks/raw/master/iPhoneOS16.5.sdk.tar.xz" -o $THEOS/sdks/iPhoneOS16.5.sdk.tar.xz
-          tar -xJf $THEOS/sdks/iPhoneOS16.5.sdk.tar.xz -C $THEOS/sdks
-          
-          # 补全Theos依赖
-          $THEOS/bin/update-theos
-
-      - name: Build Tweak
-        run: |
-          make package THEOS=$HOME/theos TARGET=iphone:clang:16.5:14.0
-          mkdir -p ./output
-          cp .theos/_/*.deb ./output/
-
-      - name: Upload Deb
-        uses: actions/upload-artifact@v4
+      - uses: actions/checkout@v4
+      - uses: robbiehanson/theos-action@v1
         with:
-          name: BlockPopup-deb
-          path: ./output/*.deb
+          sdk: iphoneos16.5
+          theos-version: latest
+      - run: make package
+      - uses: actions/upload-artifact@v4
+        with:
+          name: deb
+          path: .theos/_/*.deb
