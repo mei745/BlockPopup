@@ -7,29 +7,24 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Setup Theos & Dependencies
+      - name: Setup Theos (Auto SDK)
         run: |
-          # 安装基础工具
-          brew install ldid dpkg perl p7zip
+          # 安装依赖
+          brew install ldid dpkg perl
           
-          # 克隆Theos并更新依赖（关键：执行update-theos补全vendor目录）
+          # 安装Theos并自动下载SDK
           export THEOS=$HOME/theos
           git clone --depth 1 https://github.com/theos/theos.git $THEOS
-          $THEOS/bin/update-theos  # 补全vendor目录
-          
-          # 解压SDK到正确路径
-          mkdir -p $THEOS/sdks/iPhoneOS16.5.sdk
-          7z x ./sdks/iPhoneOS16.5.sdk.zip.7z -o$THEOS/sdks/iPhoneOS16.5.sdk
+          $THEOS/bin/update-theos  # 自动补全依赖+SDK
 
       - name: Build Tweak
         run: |
-          # 显式传递THEOS变量编译
-          make build-deb THEOS=$HOME/theos
+          make package THEOS=$HOME/theos TARGET=iphone:clang:16.5:14.0
           mkdir -p ./output
-          cp BlockPopup.deb ./output/
+          cp .theos/_/*.deb ./output/
 
       - name: Upload Deb
         uses: actions/upload-artifact@v4
         with:
           name: BlockPopup-deb
-          path: ./output/BlockPopup.deb
+          path: ./output/*.deb
