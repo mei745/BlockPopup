@@ -17,46 +17,54 @@ jobs:
     # 2. 安装依赖 & 设置 Theos
     - name: Setup Theos Environment
       run: |
-        echo "Installing Homebrew..."
+        # 安装 Homebrew
         /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
-        
-        echo "Installing dependencies..."
-        brew install ldid xz git
-        
-        echo "Cloning Theos..."
+
+        # 安装必要工具：git, ldid, make, wget
+        brew install git ldid make wget
+
+        # 克隆 Theos
         git clone --recursive https://github.com/theos/theos.git
+
+        # 设置环境变量
         echo "THEOS=$(pwd)/theos" >> $GITHUB_ENV
 
-    # 3. 下载并安装 iOS SDK (已修复链接和权限问题)
+    # 3. 下载并配置 iOS SDK (终极修复版)
     - name: Setup iOS SDK
       run: |
-        echo "Creating sdks directory..."
-        # 在当前项目目录下创建 sdks 文件夹
+        # 1. 创建 sdks 目录
         mkdir -p sdks
-        
+
+        # 2. 下载 SDK (使用可靠的直链)
         echo "Downloading iOS 16.5 SDK..."
-        # 使用 GitHub API 直链，确保下载到的是真实的 tar.gz 包
-        # -L 参数非常重要，用于跟随重定向
-        curl -L -o sdks/iOS_16.5.tar.gz https://api.github.com/repos/theos/sdks/tarball/master
-        
+        # 使用 wget 下载，它通常比 curl 在处理重定向时更稳健
+        wget -O sdk.tar.xz https://github.com/theos/sdks/archive/master.tar.gz
+
+        # 3. 解压到临时目录
         echo "Extracting SDK..."
-        # 解压到 sdks 目录
-        tar -xzf sdks/iOS_16.5.tar.gz -C sdks
-        
-        # 重命名解压出来的文件夹（通常是 theos-sdks-xxxx）为 iPhoneOS16.5.sdk
-        # 这样 Theos 才能识别
-        mv sdks/theos-sdks* sdks/iPhoneOS16.5.sdk
+        mkdir temp_sdk
+        tar -xf sdk.tar.xz -C temp_sdk
+
+        # 4. 移动正确的 SDK 文件夹到 sdks 目录
+        # 这里的源路径必须匹配解压后的实际文件夹名
+        mv temp_sdk/sdks-master/iPhoneOS16.5.sdk sdks/
+
+        # 5. 清理临时文件
+        rm -rf temp_sdk sdk.tar.xz
+
+        # 6. 验证文件是否存在
+        ls -la sdks/
 
     # 4. 编译 Tweak
     - name: Build Tweak
       run: |
-        echo "Building..."
-        # 确保 make 命令能找到 THEOS
-        make package FINALPACKAGE=1
+        # 使用绝对路径指定 SDK，避免任何歧义
+        # $(pwd) 会解析为 /Users/runner/work/BlockPopup/BlockPopup
+        make package THEOS_SDK_DIR=$(pwd)/sdks
 
-    # 5. 上传产物 (已升级到 v4)
+    # 5. 上传产物
     - name: Upload Artifact
       uses: actions/upload-artifact@v4
       with:
-        name: Tweak-Package
+        name: tweak-package
         path: packages/*.deb
