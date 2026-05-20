@@ -29,42 +29,40 @@ jobs:
         # 设置环境变量
         echo "THEOS=$(pwd)/theos" >> $GITHUB_ENV
 
-    # 3. 下载并配置 iOS SDK (终极修复版)
-    - name: Setup iOS SDK
+    # 3. 下载并配置 iOS 16.5 SDK
+    - name: Setup iOS 16.5 SDK
       run: |
-        # 1. 创建 sdks 目录
+        # 创建 sdks 目录
         mkdir -p sdks
 
-        # 2. 下载 SDK (使用可靠的直链)
-        echo "Downloading iOS 16.5 SDK..."
-        # 使用 wget 下载，它通常比 curl 在处理重定向时更稳健
-        wget -O sdk.tar.xz https://github.com/theos/sdks/archive/master.tar.gz
+        # 下载 iOS 16.5 SDK (使用 api.github.com 的直链)
+        wget -O iOS_16.5_SDK.tar.gz https://github.com/theos/sdks/releases/download/16.5/iPhoneOS16.5.sdk.tar.gz
 
-        # 3. 解压到临时目录
-        echo "Extracting SDK..."
-        mkdir temp_sdk
-        tar -xf sdk.tar.xz -C temp_sdk
+        # 解压到临时目录
+        mkdir -p temp_sdk
+        tar -xf iOS_16.5_SDK.tar.gz -C temp_sdk
 
-        # 4. 移动正确的 SDK 文件夹到 sdks 目录
-        # 这里的源路径必须匹配解压后的实际文件夹名
-        mv temp_sdk/sdks-master/iPhoneOS16.5.sdk sdks/
+        # 将 SDK 移动到 sdks 目录，并确保文件夹名为 iPhoneOS16.5.sdk
+        mv temp_sdk/iPhoneOS16.5.sdk sdks/
 
-        # 5. 清理临时文件
-        rm -rf temp_sdk sdk.tar.xz
+        # 清理临时文件
+        rm -rf temp_sdk iOS_16.5_SDK.tar.gz
 
-        # 6. 验证文件是否存在
-        ls -la sdks/
+        # 验证 SDK 是否存在
+        if [ ! -d "sdks/iPhoneOS16.5.sdk" ]; then
+          echo "Error: SDK not found in sdks directory!"
+          exit 1
+        fi
 
     # 4. 编译 Tweak
     - name: Build Tweak
       run: |
         # 使用绝对路径指定 SDK，避免任何歧义
-        # $(pwd) 会解析为 /Users/runner/work/BlockPopup/BlockPopup
-        make package THEOS_SDK_DIR=$(pwd)/sdks
+        make SDK_PATH=$(pwd)/sdks/iPhoneOS16.5.sdk
 
     # 5. 上传产物
     - name: Upload Artifact
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v3
       with:
-        name: tweak-package
+        name: Packages
         path: packages/*.deb
