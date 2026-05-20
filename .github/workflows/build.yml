@@ -17,55 +17,57 @@ jobs:
     # 2. 安装依赖 & 设置 Theos
     - name: Setup Theos
       run: |
-        # 安装 Homebrew (如果未安装)
+        # 安装 Homebrew
         /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
         
         # 安装必要工具：git, ldid, xz (xz用于解压tar.xz)
         brew install git ldid xz
         
-        # 克隆 Theos 到当前目录的 theos 文件夹
+        # 克隆 Theos
         git clone --recursive https://github.com/theos/theos.git
         
-        # 设置环境变量，指向当前目录下的 theos
+        # 设置环境变量
         echo "THEOS=$(pwd)/theos" >> $GITHUB_ENV
 
-    # 3. 下载并配置 iOS SDK (修复了只读文件系统错误)
+    # 3. 下载并配置 iOS SDK (已修复格式问题)
     - name: Setup iOS SDK
       run: |
         echo "Downloading iOS 16.5 SDK..."
         
-        # 1. 创建 sdks 目录（在当前工作目录下，而不是根目录 /）
-        # 使用 $GITHUB_WORKSPACE 确保路径绝对正确
-        mkdir -p $GITHUB_WORKSPACE/sdks
+        # 创建 sdks 目录（在当前项目根目录下，而非根目录 /）
+        mkdir -p sdks
         
-        # 2. 下载预编译的 SDK (使用稳定直链)
-        # 这里使用的是 iphoneos-arm64 16.5 版本
-        curl -L -o $GITHUB_WORKSPACE/sdks/iphoneos16.5.tar.xz https://github.com/theos/sdks/raw/master/iphoneos16.5.tar.xz
+        # 使用正确的 .tar.xz 直链（这是关键修复点）
+        # 来源：https://github.com/theos/sdks
+        curl -L -o sdks/iPhoneOS16.5.sdk.tar.xz https://github.com/theos/sdks/releases/download/16.5/iPhoneOS16.5.sdk.tar.xz
         
-        # 3. 解压 SDK
-        # -x: 解压, -J: 使用 xz 解压, -f: 指定文件, -C: 指定解压目录
-        # 注意：macOS 自带 tar 支持 -J，如果不支持则需 brew install gnu-tar
-        tar -xJf $GITHUB_WORKSPACE/sdks/iphoneos16.5.tar.xz -C $GITHUB_WORKSPACE/sdks
+        # 检查文件是否下载成功
+        if [ ! -f sdks/iPhoneOS16.5.sdk.tar.xz ]; then
+          echo "Error: SDK download failed!"
+          exit 1
+        fi
         
-        # 4. 重命名文件夹（去掉版本号后缀，方便 Makefile 引用）
-        mv $GITHUB_WORKSPACE/sdks/iphoneos16.5.sdk $GITHUB_WORKSPACE/sdks/iphoneos.sdk
+        # 解压 .tar.xz 文件
+        tar -xf sdks/iPhoneOS16.5.sdk.tar.xz -C sdks
+        
+        # 验证解压结果
+        if [ ! -d sdks/iPhoneOS16.5.sdk ]; then
+          echo "Error: SDK extraction failed!"
+          exit 1
+        fi
+        
+        echo "SDK setup completed successfully."
 
     # 4. 编译 Tweak
     - name: Build Tweak
-      env:
-        # 再次确认环境变量传递
-        THEOS: ${{ env.THEOS }}
       run: |
-        # 执行 make 打包
-        # 指定 SDK 路径，防止找不到
-        make package THEOS_PROJECT_DIR=$GITHUB_WORKSPACE
+        # 确保 make 命令能找到 Theos
+        export THEOS=$THEOS
+        make package
         
-        # 列出产物确认
-        ls -R packages
-
-    # 5. 上传产物
+    # 5. 上传构建产物
     - name: Upload Deb
       uses: actions/upload-artifact@v4
       with:
         name: BlockPopup-deb
-        path: ./packages/*.deb
+        path: ./debs/*.deb
