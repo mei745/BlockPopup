@@ -1,68 +1,50 @@
-name: Build iOS Tweak
+name: Build iOS Tweak
 
 on:
-  push:
-    branches: [ "main" ]
-  workflow_dispatch:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
 
 jobs:
-  build:
-    runs-on: macos-latest
+  build:
+    name: Compile Tweak
+    runs-on: macos-latest  # 必须使用 macOS 运行器（iOS 编译依赖 Xcode）
 
-    steps:
-    # 1. 检出代码
-    - name: Checkout Code
-      uses: actions/checkout@v4
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-    # 2. 安装依赖 & 设置 Theos
-    - name: Setup Theos Environment
-      run: |
-        # 安装 Homebrew
-        /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+      - name: Install Theos Dependencies
+        run: |
+          # 安装 Theos 依赖工具链
+          brew install dpkg wget ldid
+          # 安装 iOS SDK（关键步骤，修复编译错误）
+          wget https://github.com/theos/sdks/archive/refs/heads/master.zip
+          unzip master.zip -d ~/theos/sdks
+          rm master.zip
 
-        # 安装必要工具：git, ldid, make, wget
-        brew install git ldid make wget
+      - name: Configure Theos
+        run: |
+          # 设置 THEOS 环境变量
+          echo "export THEOS=~/theos" >> $HOME/.zshrc
+          echo "export PATH=\$THEOS/bin:\$PATH" >> $HOME/.zshrc
+          echo "export THEOS_DEVICE_IP=127.0.0.1" >> $HOME/.zshrc  # 本地编译无需真机IP
+          source $HOME/.zshrc
 
-        # 克隆 Theos
-        git clone --recursive https://github.com/theos/theos.git
+          # 克隆 Theos 核心仓库
+          git clone --recursive https://github.com/theos/theos.git ~/theos
 
-        # 设置环境变量
-        echo "THEOS=$(pwd)/theos" >> $GITHUB_ENV
+      - name: Build Tweak
+        run: |
+          # 进入项目目录（根据你的实际目录结构调整）
+          cd $GITHUB_WORKSPACE
 
-    # 3. 下载并配置 iOS 16.5 SDK
-    - name: Setup iOS 16.5 SDK
-      run: |
-        # 创建 sdks 目录
-        mkdir -p sdks
+          # 执行编译（关键：指定 SDK 版本避免 "error: no such file or directory"）
+          make SDKVERSION=17.0  # 请替换为你的目标 iOS 版本（如 16.4, 17.0）
 
-        # 下载 iOS 16.5 SDK (使用 api.github.com 的直链)
-        wget -O iOS_16.5_SDK.tar.gz https://github.com/theos/sdks/releases/download/16.5/iPhoneOS16.5.sdk.tar.gz
-
-        # 解压到临时目录
-        mkdir -p temp_sdk
-        tar -xf iOS_16.5_SDK.tar.gz -C temp_sdk
-
-        # 将 SDK 移动到 sdks 目录，并确保文件夹名为 iPhoneOS16.5.sdk
-        mv temp_sdk/iPhoneOS16.5.sdk sdks/
-
-        # 清理临时文件
-        rm -rf temp_sdk iOS_16.5_SDK.tar.gz
-
-        # 验证 SDK 是否存在
-        if [ ! -d "sdks/iPhoneOS16.5.sdk" ]; then
-          echo "Error: SDK not found in sdks directory!"
-          exit 1
-        fi
-
-    # 4. 编译 Tweak
-    - name: Build Tweak
-      run: |
-        # 使用绝对路径指定 SDK，避免任何歧义
-        make SDK_PATH=$(pwd)/sdks/iPhoneOS16.5.sdk
-
-    # 5. 上传产物
-    - name: Upload Artifact
-      uses: actions/upload-artifact@v4
-      with:
-        name: Packages
-        path: packages/*.deb
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: compiled-tweak
+          path: ${{ github.workspace }}/*.deb  # 上传生成的 .deb 安装包
