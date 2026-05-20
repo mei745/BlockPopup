@@ -1,37 +1,60 @@
 name: Build iOS Tweak
-on: [push, workflow_dispatch]
+
+# 触发条件：代码推送或手动触发
+on:
+  push:
+    branches: [ "main" ]
+  workflow_dispatch:
+
 jobs:
   build:
-    runs-on: macos-latest
+    runs-on: macos-latest # 必须使用 macOS 环境
+
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+    # 1. 检出代码
+    - name: Checkout code
+      uses: actions/checkout@v4
 
-      - name: Setup Theos + 16.5 SDK
-        run: |
-          # 安装依赖
-          brew install ldid dpkg perl curl
-          
-          # 配置Theos
-          export THEOS=$HOME/theos
-          git clone --depth 1 https://github.com/theos/theos.git $THEOS
-          
-          # 手动下载iPhoneOS16.5.sdk到Theos的sdks目录
-          mkdir -p $THEOS/sdks
-          curl -L "https://github.com/theos/sdks/raw/master/iPhoneOS16.5.sdk.tar.xz" -o $THEOS/sdks/iPhoneOS16.5.sdk.tar.xz
-          tar -xJf $THEOS/sdks/iPhoneOS16.5.sdk.tar.xz -C $THEOS/sdks
-          
-          # 补全Theos依赖
-          $THEOS/bin/update-theos
+    # 2. 设置 Theos 环境
+    - name: Setup Theos Environment
+      run: |
+        echo "Setting up Theos..."
+        # 安装必要的依赖工具
+        brew install ldid dpkg make
 
-      - name: Build Tweak
-        run: |
-          make package THEOS=$HOME/theos TARGET=iphone:clang:16.5:14.0
-          mkdir -p ./output
-          cp .theos/_/*.deb ./output/
+        # 克隆 Theos 仓库
+        git clone --recursive https://github.com/theos/theos.git $HOME/theos
 
-      - name: Upload Deb
-        uses: actions/upload-artifact@v4
-        with:
-          name: BlockPopup-deb
-          path: ./output/*.deb
+        # 设置环境变量
+        echo "THEOS=$HOME/theos" >> $GITHUB_ENV
+
+    # 3. 下载并配置 iOS SDK
+    - name: Setup iOS SDK
+      run: |
+        echo "Setting up iOS SDK..."
+        # 创建 SDKs 目录
+        mkdir -p $THEOS/sdks
+
+        # 下载预编译的 iOS 16.5 SDK
+        # 使用 -C 参数的替代方案：先 cd 再解压
+        curl -L -o /tmp/iPhoneOS16.5.sdk.tar.xz \
+          https://github.com/theos/sdks/raw/master/iPhoneOS16.5.sdk.tar.xz
+
+        # 进入目标目录并解压
+        cd $THEOS/sdks && tar -xf /tmp/iPhoneOS16.5.sdk.tar.xz
+
+    # 4. 编译 Tweak
+    - name: Build Tweak
+      run: |
+        echo "Building the tweak..."
+        # 执行 make 命令进行编译打包
+        # 明确指定 TARGET 以匹配你的 Makefile 配置
+        make package THEOS=$THEOS TARGET="iphone:clang:16.5:14.0"
+
+    # 5. 上传构建产物 (.deb 文件)
+    - name: Upload Artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: BlockPopup-deb-package
+        path: packages/*.deb # .deb 文件通常会生成在 packages 目录下
+        if-no-files-found: error
