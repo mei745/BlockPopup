@@ -62,7 +62,7 @@ jobs:
 
     # 5. 上传产物
     - name: Upload Artifact
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: Packages
         path: packages/*.deb
