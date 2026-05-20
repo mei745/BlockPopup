@@ -1,32 +1,23 @@
+# 架构：支持arm64/arm64e（适配新iPhone）
 ARCHS = arm64 arm64e
+# 编译目标：iOS 16.5 SDK，最低支持iOS 14.0
 TARGET = iphone:clang:16.5:14.0
-
+# Deb包输出目录
 THEOS_PACKAGE_DIR_NAME = debs
-# 用绝对路径引入Theos文件
+
+# 引入Theos公共配置
 include $(THEOS)/makefiles/common.mk
 
+# Tweak名称
 TWEAK_NAME = BlockPopup
+# 要编译的文件（你的Tweak代码）
 BlockPopup_FILES = Tweak.xm
+# 依赖的系统框架（UIKit用于界面操作）
 BlockPopup_FRAMEWORKS = UIKit
-BlockPopup_LDFLAGS = -dynamiclib -install_name @rpath/$(TWEAK_NAME).dylib
 
-# 同样用绝对路径引入tweak.mk
-include $(THEOS)/makefiles/tweak.mk
+# 引入Tweak编译规则
+include $(THEOS_MAKE_PATH)/tweak.mk
 
-build-dylib: clean all
-	@echo "生成动态库"
-	cp .theos/obj/debug/$(TWEAK_NAME).dylib ./$(TWEAK_NAME).dylib
-
-build-deb: build-dylib
-	@echo "生成deb"
-	mkdir -p .theos/deb/DEBIAN .theos/deb/Library/MobileSubstrate/DynamicLibraries
-	cp $(TWEAK_NAME).dylib .theos/deb/Library/MobileSubstrate/DynamicLibraries/
-	cp $(TWEAK_NAME).plist .theos/deb/Library/MobileSubstrate/DynamicLibraries/
-	echo -e "Package: com.temp.$(TWEAK_NAME)\nVersion: 1.0.0\nArchitecture: iphoneos-arm" > .theos/deb/DEBIAN/control
-	dpkg-deb -b .theos/deb $(TWEAK_NAME).deb
-
-extract-lib: build-deb
-	@echo "提取库"
-	dpkg-deb -x $(TWEAK_NAME).deb ./deb-extract
-	cp ./deb-extract/Library/MobileSubstrate/DynamicLibraries/$(TWEAK_NAME).dylib ./
-	rm -rf ./deb-extract
+# 安装后重启SpringBoard（可选，用于生效）
+after-install::
+	install.exec "killall -9 SpringBoard"
