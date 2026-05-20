@@ -7,11 +7,15 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Setup Theos & SDK
+      - name: Setup Theos & Dependencies
         run: |
+          # 安装基础工具
           brew install ldid dpkg perl p7zip
+          
+          # 克隆Theos并更新依赖（关键：执行update-theos补全vendor目录）
           export THEOS=$HOME/theos
           git clone --depth 1 https://github.com/theos/theos.git $THEOS
+          $THEOS/bin/update-theos  # 补全vendor目录
           
           # 解压SDK到正确路径
           mkdir -p $THEOS/sdks/iPhoneOS16.5.sdk
@@ -19,7 +23,7 @@ jobs:
 
       - name: Build Tweak
         run: |
-          # 显式传递THEOS变量给make
+          # 显式传递THEOS变量编译
           make build-deb THEOS=$HOME/theos
           mkdir -p ./output
           cp BlockPopup.deb ./output/
