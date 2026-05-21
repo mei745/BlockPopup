@@ -21,54 +21,72 @@ jobs:
         run: |
           brew install dpkg ldid wget
 
-      # 3. 下载 SDK 并配置 Theos
-      - name: Setup Theos & SDK
+      # 3. 配置 Theos 环境 (包含 SDK 安装)
+      - name: Setup Theos
         run: |
-          # 1. 定义路径变量
+          # 定义路径
           THEOS_PATH="/opt/theos"
-          SDK_URL="https://github.com/theos/sdks/archive/refs/heads/master.zip"
-
-          # 2. 清理并创建目录
-          sudo rm -rf $THEOS_PATH
-          sudo mkdir -p $THEOS_PATH
-
-          # 3. 克隆 Theos
-          echo "👉 克隆 Theos..."
-          sudo git clone --recursive https://github.com/theos/theos.git $THEOS_PATH
-
-          # 4. 下载并解压 SDK 到正确位置
-          echo "👉 下载 SDK..."
-          wget -qO- $SDK_URL | bsdtar -xvf- -C $THEOS_PATH --strip-components=1 -s '/sdks-master/sdks/'
-
-          # 5. 验证 SDK 是否存在
-          echo "👉 当前可用的 SDK："
-          ls $THEOS_PATH/sdks
-
-          # 6. 设置环境变量
+          SDK_TEMP_DIR="$HOME/theos_sdks"
+          
+          # 设置环境变量 (关键：必须在当前步骤生效)
           echo "THEOS=$THEOS_PATH" >> $GITHUB_ENV
           echo "$THEOS_PATH/bin" >> $GITHUB_PATH
 
-      # 4. 编译 Tweak
+          # 1. 清理旧环境
+          sudo rm -rf $THEOS_PATH
+          sudo mkdir -p $THEOS_PATH
+          mkdir -p $SDK_TEMP_DIR
+
+          # 2. 克隆 Theos 核心
+          echo "🚀 Cloning Theos..."
+          sudo git clone --recursive https://github.com/theos/theos.git $THEOS_PATH
+
+          # 3. 下载并安装 SDKs (标准做法：解压到 theos/sdks)
+          echo "📦 Downloading iOS SDKs..."
+          wget -qO- https://github.com/theos/sdks/archive/master.zip | bsdtar -xvf- -C $SDK_TEMP_DIR --strip-components=1
+          
+          # 将 SDK 移动到 Theos 的标准目录
+          echo "🚚 Moving SDKs to $THEOS_PATH/sdks..."
+          sudo mv $SDK_TEMP_DIR $THEOS_PATH/sdks
+
+          # 4. 修复权限 (防止 Permission Denied)
+          sudo chown -R $(whoami) $THEOS_PATH
+          ls -la $THEOS_PATH/sdks
+
+      # 4. 编译插件
       - name: Build Tweak
         run: |
-          # 自动检测最新的 SDK 名称 (例如 iPhoneOS17.5.sdk)
+          # 自动检测 SDK 版本 (例如 iPhoneOS18.0.sdk)
           SDK_NAME=$(ls $THEOS/sdks | head -n 1)
-
+          
           if [ -z "$SDK_NAME" ]; then
-            echo "❌ 错误：未找到 SDK！"
+            echo "❌ Error: No SDK found in $THEOS/sdks"
             exit 1
           fi
 
-          echo "✅ 检测到 SDK: $SDK_NAME"
+          echo "✅ Using SDK: $SDK_NAME"
+          echo "🔧 Building tweak..."
 
           # 执行编译
-          # 注意：这里我们显式指定 SDKVERSION，覆盖 Makefile 里的旧设置
+          # SDKVERSION 参数会自动覆盖 TARGET 中的 latest
           make clean
           make "SDKVERSION=${SDK_NAME%.sdk}"
-      
-      # 5. 上传产物
+
+      # 5. 打包上传
+      - name: Package DEB
+        run: |
+          # 使用 npack 创建 .deb 包
+          if [ -f "$THEOS/bin/npack" ]; then
+            $THEOS/bin/npack .
+          else
+            make package
+          fi
+
+      # 6. 上传产物
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: packages
-          path: packages/*.deb
+          name: iOS-Tweak-Package
+          path: |
+            *.deb
+            packages/*.deb
