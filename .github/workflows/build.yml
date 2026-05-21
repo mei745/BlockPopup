@@ -21,15 +21,20 @@ jobs:
         run: |
           brew install dpkg ldid wget
 
-      # 3. 下载 iOS SDK
+      # 3. 下载 iOS SDK (并自动获取最新版本号)
       - name: Download iOS SDKs
         run: |
           # 创建目录
           mkdir -p $HOME/theos/sdks
           # 下载并解压 SDK
           wget -qO- https://github.com/theos/sdks/archive/master.zip | bsdtar -xvf- -C $HOME/theos/sdks --strip-components=1
+          
+          # 自动检测最新 SDK 版本号 (例如 iPhoneOS18.0.sdk)
+          export LATEST_SDK=$(ls $HOME/theos/sdks/ | grep -E "^iPhoneOS.*\.sdk$" | sort -V | tail -n 1)
+          echo "DETECTED_SDK=$LATEST_SDK" >> $GITHUB_ENV
+          echo "Found SDK: $LATEST_SDK"
 
-      # 4. 配置 Theos 环境 (路径修正为 /opt/theos)
+      # 4. 配置 Theos 环境
       - name: Configure Theos
         run: |
           echo "THEOS=/opt/theos" >> $GITHUB_ENV
@@ -39,11 +44,12 @@ jobs:
           sudo rm -rf /opt/theos
           sudo git clone --recursive https://github.com/theos/theos.git /opt/theos
 
-      # 5. 编译插件 (加入 SDKVERSION=17.5 修复报错)
+      # 5. 编译插件 (使用自动检测到的 SDK 版本)
       - name: Build Tweak
         run: |
           cd $GITHUB_WORKSPACE
-          make SDKVERSION=17.5
+          # 使用检测到的最新 SDK 版本进行编译
+          make SDKVERSION=${DETECTED_SDK#iPhoneOS} SDKPATH=$HOME/theos/sdks/$DETECTED_SDK
 
       # 6. 上传产物
       - name: Upload Artifact
