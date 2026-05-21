@@ -21,35 +21,36 @@ jobs:
         run: |
           brew install dpkg ldid wget
 
-      # 3. 下载 iOS SDK (并自动获取最新版本号)
+      # 3. 下载 iOS SDK
       - name: Download iOS SDKs
         run: |
           # 创建目录
           mkdir -p $HOME/theos/sdks
-          # 下载并解压 SDK
+          # 下载并解压 SDK (Theos 官方维护的 SDK 集合)
           wget -qO- https://github.com/theos/sdks/archive/master.zip | bsdtar -xvf- -C $HOME/theos/sdks --strip-components=1
           
-          # 自动检测最新 SDK 版本号 (例如 iPhoneOS18.0.sdk)
-          export LATEST_SDK=$(ls $HOME/theos/sdks/ | grep -E "^iPhoneOS.*\.sdk$" | sort -V | tail -n 1)
-          echo "DETECTED_SDK=$LATEST_SDK" >> $GITHUB_ENV
-          echo "Found SDK: $LATEST_SDK"
+          # 【关键修复】自动获取 sdks 目录下的文件夹名（例如 iPhoneOS18.0.sdk）
+          export THEOS_SDK_DIR=$(ls $HOME/theos/sdks | head -n 1)
+          echo "Detected SDK: $THEOS_SDK_DIR"
+          
+          # 将变量写入环境变量，供后续步骤使用
+          echo "THEOS=$HOME/theos" >> $GITHUB_ENV
+          echo "THEOS_SDK_DIR=$THEOS_SDK_DIR" >> $GITHUB_ENV
+          echo "SDKVERSION=$(echo $THEOS_SDK_DIR | sed 's/.sdk//')" >> $GITHUB_ENV
 
       # 4. 配置 Theos 环境
       - name: Configure Theos
         run: |
-          echo "THEOS=/opt/theos" >> $GITHUB_ENV
-          echo "/opt/theos/bin" >> $GITHUB_PATH
-          echo "THEOS_DEVICE_IP=127.0.0.1" >> $GITHUB_ENV
-          
-          sudo rm -rf /opt/theos
-          sudo git clone --recursive https://github.com/theos/theos.git /opt/theos
+          # 克隆 Theos 到用户目录（避免权限问题，尽量不用 sudo）
+          git clone --recursive https://github.com/theos/theos.git $HOME/theos
 
-      # 5. 编译插件 (使用自动检测到的 SDK 版本)
+      # 5. 编译插件
       - name: Build Tweak
         run: |
-          cd $GITHUB_WORKSPACE
-          # 使用检测到的最新 SDK 版本进行编译
-          make SDKVERSION=${DETECTED_SDK#iPhoneOS} SDKPATH=$HOME/theos/sdks/$DETECTED_SDK
+          # 直接使用上面自动获取的 SDKVERSION 进行编译
+          make package SDKVERSION=$SDKVERSION
+          
+          # 提示：如果你的项目需要指定 TARGET (如 arm64)，可以在这里追加 TARGET=iphone:clang:14.0:14.0
 
       # 6. 上传产物
       - name: Upload Artifact
