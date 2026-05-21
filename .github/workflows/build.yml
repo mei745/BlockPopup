@@ -16,41 +16,38 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      # 2. 安装依赖工具 (dpkg, ldid, wget)
+      # 2. 安装依赖工具
       - name: Install Dependencies
         run: |
           brew install dpkg ldid wget
 
-      # 3. 下载 SDK
+      # 3. 下载 iOS SDK
       - name: Download iOS SDKs
         run: |
+          # 创建目录
           mkdir -p $HOME/theos/sdks
-          # 确保下载完整的 SDK 集合
+          # 下载并解压 SDK
           wget -qO- https://github.com/theos/sdks/archive/master.zip | bsdtar -xvf- -C $HOME/theos/sdks --strip-components=1
-          # 调试：列出 SDK 目录，确认里面有什么
-          ls $HOME/theos/sdks
 
-      # 4. 配置 Theos (路径修正为 /opt/theos)
+      # 4. 配置 Theos 环境 (路径修正为 /opt/theos)
       - name: Configure Theos
         run: |
           echo "THEOS=/opt/theos" >> $GITHUB_ENV
           echo "/opt/theos/bin" >> $GITHUB_PATH
-          # 关键：告诉 Theos SDK 在哪里（虽然默认会找 $THEOS/sdks，但显式指定更稳妥）
-          echo "THEOS_SDK_DIR=$HOME/theos/sdks" >> $GITHUB_ENV
+          echo "THEOS_DEVICE_IP=127.0.0.1" >> $GITHUB_ENV
           
           sudo rm -rf /opt/theos
           sudo git clone --recursive https://github.com/theos/theos.git /opt/theos
 
-      # 5. 编译 (强制指定版本)
+      # 5. 编译插件 (加入 SDKVERSION=17.5 修复报错)
       - name: Build Tweak
         run: |
           cd $GITHUB_WORKSPACE
-          # 这里强制指定 17.5，避免 Makefile 里写死的 14.5 报错
           make SDKVERSION=17.5
 
-      # 6. 上传产物 (.deb 文件)
+      # 6. 上传产物
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: compiled-tweak
-          path: ${{ github.workspace }}/*.deb
+          name: Packages
+          path: packages/*.deb
