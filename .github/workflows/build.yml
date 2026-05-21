@@ -16,41 +16,52 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      # 2. 安装依赖
+      # 2. 安装依赖 (分开安装更稳定，避免 gpatch 错误)
       - name: Install Dependencies
         run: |
-          brew install dpkg ldid wget
+          # 尝试安装，如果失败则忽略并继续（GitHub Actions 有时自带这些工具）
+          brew install ldid || echo "ldid install failed or already installed"
+          brew install dpkg || echo "dpkg install failed or already installed"
+          brew install wget || echo "wget install failed or already installed"
 
       # 3. 配置 Theos 环境 (包含 SDK 安装)
       - name: Setup Theos
         run: |
           # 定义路径
           THEOS_PATH="/opt/theos"
-          SDK_TEMP_DIR="$HOME/theos_sdks"
           
           # 设置环境变量 (关键：必须在当前步骤生效)
           echo "THEOS=$THEOS_PATH" >> $GITHUB_ENV
           echo "$THEOS_PATH/bin" >> $GITHUB_PATH
 
-          # 1. 清理旧环境
-          sudo rm -rf $THEOS_PATH
-          sudo mkdir -p $THEOS_PATH
-          mkdir -p $SDK_TEMP_DIR
+          # 1. 清理旧环境 (使用普通用户权限，避免 sudo)
+          rm -rf $THEOS_PATH
+          mkdir -p $THEOS_PATH
 
           # 2. 克隆 Theos 核心
           echo "🚀 Cloning Theos..."
-          sudo git clone --recursive https://github.com/theos/theos.git $THEOS_PATH
+          git clone --recursive https://github.com/theos/theos.git $THEOS_PATH
 
-          # 3. 下载并安装 SDKs (标准做法：解压到 theos/sdks)
+          # 3. 下载并安装 SDKs 
           echo "📦 Downloading iOS SDKs..."
-          wget -qO- https://github.com/theos/sdks/archive/master.zip | bsdtar -xvf- -C $SDK_TEMP_DIR --strip-components=1
+          # 创建临时目录
+          mkdir -p /tmp/theos_sdks
           
-          # 将 SDK 移动到 Theos 的标准目录
+          # 下载并解压 SDK 到临时目录
+          wget -qO- https://github.com/theos/sdks/archive/master.zip | bsdtar -xvf- -C /tmp/theos_sdks --strip-components=1
+          
+          # 将 SDK 文件夹移动到 Theos 的标准目录 (注意：是移动内容，不是文件夹本身)
           echo "🚚 Moving SDKs to $THEOS_PATH/sdks..."
-          sudo mv $SDK_TEMP_DIR $THEOS_PATH/sdks
+          mv /tmp/theos_sdks/* $THEOS_PATH/sdks/  # <--- 核心修复点：直接移动到 sdks 目录内
 
-          # 4. 修复权限 (防止 Permission Denied)
+          # 4. 清理
+          rm -rf /tmp/theos_sdks
+
+          # 5. 修复权限 (确保当前用户有权限读写)
           sudo chown -R $(whoami) $THEOS_PATH
+          
+          # 查看结果，确认 SDK 存在
+          echo "✅ SDKs available:"
           ls -la $THEOS_PATH/sdks
 
       # 4. 编译插件
@@ -72,17 +83,7 @@ jobs:
           make clean
           make "SDKVERSION=${SDK_NAME%.sdk}"
 
-      # 5. 打包上传
-      - name: Package DEB
-        run: |
-          # 使用 npack 创建 .deb 包
-          if [ -f "$THEOS/bin/npack" ]; then
-            $THEOS/bin/npack .
-          else
-            make package
-          fi
-
-      # 6. 上传产物
+      # 5. 上传产物
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
