@@ -1,5 +1,5 @@
 # 指定 iOS 版本和 CPU 架构
-TARGET := iphone:clang:12.0
+TARGET := iphone:clang:latest
 ARCHS := arm64 x86_64
 
 # 指定 Theos 的安装路径 (CI 环境中通常位于 /opt/theos)
