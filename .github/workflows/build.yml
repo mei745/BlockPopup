@@ -21,37 +21,32 @@ jobs:
         run: |
           brew install dpkg ldid wget
 
-      # 3. 下载 iOS SDK (修复 "No such file or directory" 的关键)
+      # 3. 下载 SDK
       - name: Download iOS SDKs
         run: |
-          # 创建目录
           mkdir -p $HOME/theos/sdks
-          # 下载 SDK 压缩包并解压到目录
+          # 确保下载完整的 SDK 集合
           wget -qO- https://github.com/theos/sdks/archive/master.zip | bsdtar -xvf- -C $HOME/theos/sdks --strip-components=1
+          # 调试：列出 SDK 目录，确认里面有什么
+          ls $HOME/theos/sdks
 
-      # 4. 配置 Theos 环境 (修复路径冲突的关键)
+      # 4. 配置 Theos (路径修正为 /opt/theos)
       - name: Configure Theos
         run: |
-          # 1. 设置环境变量指向 /opt/theos (与 Makefile 保持一致)
           echo "THEOS=/opt/theos" >> $GITHUB_ENV
           echo "/opt/theos/bin" >> $GITHUB_PATH
-          echo "THEOS_DEVICE_IP=127.0.0.1" >> $GITHUB_ENV
+          # 关键：告诉 Theos SDK 在哪里（虽然默认会找 $THEOS/sdks，但显式指定更稳妥）
+          echo "THEOS_SDK_DIR=$HOME/theos/sdks" >> $GITHUB_ENV
           
-          # 2. 强制清空旧目录（防止缓存冲突）
           sudo rm -rf /opt/theos
-          
-          # 3. 克隆 Theos 到 /opt/theos
           sudo git clone --recursive https://github.com/theos/theos.git /opt/theos
 
-      # 5. 编译 Tweak
+      # 5. 编译 (强制指定版本)
       - name: Build Tweak
         run: |
-          # 进入工作目录
           cd $GITHUB_WORKSPACE
-          
-          # 执行编译
-          # 如果报错提示 SDK 版本过高，可以尝试修改 SDKVERSION=16.4 或 15.5
-          make package FINALPACKAGE=1
+          # 这里强制指定 17.5，避免 Makefile 里写死的 14.5 报错
+          make SDKVERSION=17.5
 
       # 6. 上传产物 (.deb 文件)
       - name: Upload Artifact
