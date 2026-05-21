@@ -21,36 +21,42 @@ jobs:
         run: |
           brew install dpkg ldid wget
 
-      # 3. 下载 iOS SDK
+      # 3. 下载 iOS SDK (先下载 SDK 到临时目录，避免冲突)
       - name: Download iOS SDKs
         run: |
-          # 创建目录
-          mkdir -p $HOME/theos/sdks
-          # 下载并解压 SDK (Theos 官方维护的 SDK 集合)
-          wget -qO- https://github.com/theos/sdks/archive/master.zip | bsdtar -xvf- -C $HOME/theos/sdks --strip-components=1
-          
-          # 【关键修复】自动获取 sdks 目录下的文件夹名（例如 iPhoneOS18.0.sdk）
-          export THEOS_SDK_DIR=$(ls $HOME/theos/sdks | head -n 1)
-          echo "Detected SDK: $THEOS_SDK_DIR"
-          
-          # 将变量写入环境变量，供后续步骤使用
-          echo "THEOS=$HOME/theos" >> $GITHUB_ENV
-          echo "THEOS_SDK_DIR=$THEOS_SDK_DIR" >> $GITHUB_ENV
-          echo "SDKVERSION=$(echo $THEOS_SDK_DIR | sed 's/.sdk//')" >> $GITHUB_ENV
+          # 创建临时目录下载 SDK
+          mkdir -p $HOME/sdks_temp
+          # 下载并解压
+          wget -qO- https://github.com/theos/sdks/archive/master.zip | bsdtar -xvf- -C $HOME/sdks_temp --strip-components=1
 
       # 4. 配置 Theos 环境
       - name: Configure Theos
         run: |
-          # 克隆 Theos 到用户目录（避免权限问题，尽量不用 sudo）
-          git clone --recursive https://github.com/theos/theos.git $HOME/theos
+          # 1. 设置环境变量
+          echo "THEOS=/opt/theos" >> $GITHUB_ENV
+          echo "/opt/theos/bin" >> $GITHUB_PATH
+          
+          # 2. 强制克隆 Theos 到 /opt/theos
+          # 注意：这里不需要 sudo，因为 /opt 在 macOS runner 上通常是可以写的，或者我们可以用 $HOME/theos
+          # 为了保险起见，我们使用 $HOME/theos 作为安装路径，这是最稳妥的
+          echo "THEOS=$HOME/theos" >> $GITHUB_ENV
+          echo "$HOME/theos/bin" >> $GITHUB_PATH
+          
+          # 3. 移动 SDK 到正确位置
+          mkdir -p $HOME/theos/sdks
+          mv $HOME/sdks_temp/* $HOME/theos/sdks/
+
+          # 4. 克隆 Theos (如果已存在则先删除)
+          rm -rf $HOME/theos/.git # 清除可能存在的旧 git 信息
+          git clone --recursive --depth=1 https://github.com/theos/theos.git $HOME/theos
 
       # 5. 编译插件
       - name: Build Tweak
         run: |
-          # 直接使用上面自动获取的 SDKVERSION 进行编译
-          make package SDKVERSION=$SDKVERSION
-          
-          # 提示：如果你的项目需要指定 TARGET (如 arm64)，可以在这里追加 TARGET=iphone:clang:14.0:14.0
+          # 进入工作目录
+          cd $GITHUB_WORKSPACE
+          # 编译 (Makefile 会自动检测 SDK 版本)
+          make package
 
       # 6. 上传产物
       - name: Upload Artifact
