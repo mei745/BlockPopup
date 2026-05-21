@@ -6,7 +6,7 @@
 // ==========================================
 static NSArray *kBlockKeywords = @[
     @"激活", @"授权", @"激活码", @"注册", @"正版", @"正版验证",
-    @"注意", @"微密友", @"盗版", @"更新", @"激活",@"卡密",
+    @"请注意", @"微密友", @"盗版", @"更新", @"卡密",@"正版下载",
     @"插件", @"license", @"activation", @"key", @"破解",
     @"警告", @"提示", @"试用", @"购买", @"续费", @"过期",
     @"捐赠", @"赞助", @"PayPal", @"Alipay", @"WeChat Pay"
@@ -28,18 +28,27 @@ static BOOL ContainsBlockKeyword(NSString *text) {
     return NO;
 }
 
+// ==========================================
+// 核心逻辑：拦截 UIAlertController (iOS 8+)
+// ==========================================
 %hook UIAlertController
 
-// Hook 弹窗显示的方法
 - (void)viewWillAppear:(BOOL)animated {
-    %orig; // 先调用原方法，确保对象初始化完成
+    %orig; // 先调用原方法
 
-    // 1. 只处理 Alert 样式，放过底部的 ActionSheet
+    // 1. 检查“永久屏蔽”开关
+    // 如果开关是 YES，说明以前拦截过，直接跳过，不再处理
+    NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
+    if ([defaults boolForKey:@"Mei745_AlwaysBlockAlert"]) {
+        return; // 直接返回，什么都不做
+    }
+
+    // 2. 只处理 Alert 样式
     if (self.preferredStyle != UIAlertControllerStyleAlert) {
         return;
     }
 
-    // 2. 检查标题和内容
+    // 3. 检查标题、内容和按钮
     BOOL shouldBlock = NO;
 
     if (ContainsBlockKeyword(self.title)) {
@@ -50,7 +59,6 @@ static BOOL ContainsBlockKeyword(NSString *text) {
         shouldBlock = YES;
     }
 
-    // 3. (进阶) 检查按钮文字
     if (!shouldBlock) {
         for (UIAlertAction *action in self.actions) {
             if (ContainsBlockKeyword(action.title)) {
@@ -60,40 +68,42 @@ static BOOL ContainsBlockKeyword(NSString *text) {
         }
     }
 
-    // 4. 执行拦截
+    // 4. 执行拦截与记录
     if (shouldBlock) {
-        NSLog(@"[BlockPopup] 🚫 已拦截恶意弹窗: %@", self.title ?: self.message);
+        NSLog(@"[BlockPopup] 🚫 检测到关键词，执行拦截并永久屏蔽！");
 
-        // 延迟极短时间关闭，防止界面卡死
+        // 【关键步骤】写入记录，下次启动就不会再进这个判断了
+        [defaults setBool:YES forKey:@"Mei745_AlwaysBlockAlert"];
+        [defaults synchronize]; // 强制保存
+
+        // 关闭弹窗
         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.1 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
             [self dismissViewControllerAnimated:NO completion:nil];
         });
     }
 }
 
-// ==========================================
-// 关键修复：
-// %new 必须写在 %hook 的大括号内部，且在 %end 之前
-// ==========================================
-%new
-- (void)blockPopup_dismissImmediately {
-    [self dismissViewControllerAnimated:NO completion:nil];
-}
-%end // %hook UIAlertController 结束
+%end
 
 // ==========================================
-// 额外防御：针对老式 UIAlertView
+// 核心逻辑：拦截老式 UIAlertView
 // ==========================================
 %hook UIAlertView
 
 - (void)show {
+    // 1. 检查“永久屏蔽”开关
+    NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
+    if ([defaults boolForKey:@"Mei745_AlwaysBlockAlert"]) {
+        %orig; // 如果开关开了，老式弹窗直接放行（或者你也可以选择 return 直接屏蔽所有）
+        return;
+    }
+
     BOOL shouldBlock = NO;
 
     if (ContainsBlockKeyword(self.title) || ContainsBlockKeyword(self.message)) {
         shouldBlock = YES;
     }
 
-    // 检查按钮
     for (int i = 0; i < self.numberOfButtons; i++) {
         if (ContainsBlockKeyword([self buttonTitleAtIndex:i])) {
             shouldBlock = YES;
@@ -102,7 +112,12 @@ static BOOL ContainsBlockKeyword(NSString *text) {
     }
 
     if (shouldBlock) {
-        NSLog(@"[BlockPopup] 🚫 已拦截老式弹窗: %@", self.title);
+        NSLog(@"[BlockPopup] 🚫 检测到老式弹窗关键词，拦截并永久屏蔽！");
+
+        // 【关键步骤】写入记录
+        [defaults setBool:YES forKey:@"Mei745_AlwaysBlockAlert"];
+        [defaults synchronize];
+
         return; // 直接不调用 %orig，弹窗就不会显示
     }
 
