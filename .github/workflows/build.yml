@@ -21,12 +21,12 @@ jobs:
         run: |
           brew install dpkg ldid wget
 
-      # 3. 下载 iOS SDK (先下载 SDK 到临时目录，避免冲突)
+      # 3. 下载 iOS SDK (必须先下载到临时目录)
       - name: Download iOS SDKs
         run: |
-          # 创建临时目录下载 SDK
+          # 1. 创建临时目录下载 SDK，避免和 Theos 目录冲突
           mkdir -p $HOME/sdks_temp
-          # 下载并解压
+          # 2. 下载并解压
           wget -qO- https://github.com/theos/sdks/archive/master.zip | bsdtar -xvf- -C $HOME/sdks_temp --strip-components=1
 
       # 4. 配置 Theos 环境
@@ -35,32 +35,25 @@ jobs:
           # 1. 设置环境变量
           echo "THEOS=/opt/theos" >> $GITHUB_ENV
           echo "/opt/theos/bin" >> $GITHUB_PATH
-          
-          # 2. 强制克隆 Theos 到 /opt/theos
-          # 注意：这里不需要 sudo，因为 /opt 在 macOS runner 上通常是可以写的，或者我们可以用 $HOME/theos
-          # 为了保险起见，我们使用 $HOME/theos 作为安装路径，这是最稳妥的
-          echo "THEOS=$HOME/theos" >> $GITHUB_ENV
-          echo "$HOME/theos/bin" >> $GITHUB_PATH
-          
-          # 3. 移动 SDK 到正确位置
-          mkdir -p $HOME/theos/sdks
-          mv $HOME/sdks_temp/* $HOME/theos/sdks/
 
-          # 4. 克隆 Theos (如果已存在则先删除)
-          rm -rf $HOME/theos/.git # 清除可能存在的旧 git 信息
-          git clone --recursive --depth=1 https://github.com/theos/theos.git $HOME/theos
+          # 2. 确保 /opt/theos 是干净的 (强制删除旧文件)
+          sudo rm -rf /opt/theos
 
-      # 5. 编译插件
+          # 3. 克隆 Theos
+          sudo git clone --recursive https://github.com/theos/theos.git /opt/theos
+
+          # 4. 将刚才下载的 SDK 移动到 Theos 目录
+          sudo mv $HOME/sdks_temp /opt/theos/sdks
+
+          # 5. 验证 SDK 是否存在
+          ls /opt/theos/sdks
+
+      # 5. 编译插件 (自动适配 SDK 版本)
       - name: Build Tweak
         run: |
-          # 进入工作目录
-          cd $GITHUB_WORKSPACE
-          # 编译 (Makefile 会自动检测 SDK 版本)
-          make package
+          # 自动检测 SDK 文件夹名称 (例如 iPhoneOS18.0.sdk)
+          export SDK=$(ls $THEOS/sdks | head -n 1)
+          echo "👉 Using SDK: $SDK"
 
-      # 6. 上传产物
-      - name: Upload Artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: Packages
-          path: packages/*.deb
+          # 执行编译，指定找到的 SDK
+          make "SDKVERSION=${SDK%.sdk}"
