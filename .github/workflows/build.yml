@@ -21,35 +21,51 @@ jobs:
         run: |
           brew install dpkg ldid wget
 
-      # 3. 下载 iOS SDK 
+      # 3. 下载 iOS SDK
       - name: Download iOS SDKs
         run: |
+          # 创建临时目录下载 SDK
           mkdir -p $HOME/sdks_temp
-          # 增加重试次数和超时设置，防止网络波动导致失败
-          wget -t 3 --timeout=30 -qO- https://github.com/theos/sdks/archive/master.zip | bsdtar -xvf- -C $HOME/sdks_temp --strip-components=1
+          # 下载并解压
+          wget -qO- https://github.com/theos/sdks/archive/master.zip | bsdtar -xvf- -C $HOME/sdks_temp --strip-components=1
 
       # 4. 配置 Theos 环境
       - name: Configure Theos
         run: |
-          # 设置环境变量 (使用 sudo 时可能需要传递环境变量，直接写入文件更稳定)
-          echo "THEOS=/opt/theos" | sudo tee -a /etc/profile
-          echo "/opt/theos/bin" | sudo tee -a /etc/paths
-          
+          # 1. 设置环境变量
+          echo "THEOS=/opt/theos" >> $GITHUB_ENV
+          echo "/opt/theos/bin" >> $GITHUB_PATH
+
+          # 2. 强制删除旧文件并克隆 Theos
           sudo rm -rf /opt/theos
-          # 增加 --depth=1 减少克隆时间
-          sudo git clone --recursive --depth=1 https://github.com/theos/theos.git /opt/theos
-          
-          # 移动 SDK
-          sudo mv $HOME/sdks_temp/* /opt/theos/sdks/ 2>/dev/null || true
-          # 查看结果
-          ls -la /opt/theos/sdks/
+          sudo git clone --recursive https://github.com/theos/theos.git /opt/theos
+
+          # 3. 将刚才下载的 SDK 移动到 Theos 目录
+          sudo mv $HOME/sdks_temp /opt/theos/sdks
+
+          # 4. 验证 SDK 是否存在
+          ls /opt/theos/sdks
 
       # 5. 编译插件 (自动适配 SDK 版本)
       - name: Build Tweak
         run: |
-          # 自动检测 SDK 文件夹名称 (例如 iPhoneOS18.0.sdk)
+          # 核心修复：使用 $THEOS 变量指向正确的路径 /opt/theos
+          echo "🔍 正在查找 SDK..."
           export SDK=$(ls $THEOS/sdks | head -n 1)
-          echo "👉 Using SDK: $SDK"
 
-          # 执行编译，指定找到的 SDK
+          if [ -z "$SDK" ]; then
+            echo "❌ 错误：未找到 SDK！"
+            exit 1
+          fi
+
+          echo "👉 使用 SDK: $SDK"
+
+          # 执行编译，指定找到的 SDK (去掉 .sdk 后缀)
           make "SDKVERSION=${SDK%.sdk}"
+
+      # 6. 上传产物
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Packages
+          path: packages/*.deb
