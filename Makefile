@@ -1,9 +1,8 @@
 # 指定 iOS 版本和 CPU 架构
-# 修改说明：去掉了中间的 "14.5"，让 Theos 自动使用最新的 SDK
 TARGET := iphone:clang:12.0
 ARCHS := arm64 x86_64
 
-# 指定 Theos 的安装路径
+# 指定 Theos 的安装路径 (CI 环境中通常位于 /opt/theos)
 THEOS := /opt/theos
 
 # 定义要注入的进程
@@ -12,8 +11,10 @@ INSTALL_TARGET_PROCESSES = SpringBoard
 # 指定要编译的 Tweak 名称
 TWEAK_NAME = mei745
 
-# 指定源文件
+# --- 关键修改：明确指定源文件和类型 ---
+# 告诉 Theos 使用 Logos 处理 .xm 文件
 mei745_FILES = Tweak.xm
+mei745_TYPE = application
 
 # 开启现代 Objective-C 语法支持 (ARC)
 mei745_CFLAGS = -fobjc-arc
