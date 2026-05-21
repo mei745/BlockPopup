@@ -9,42 +9,48 @@ on:
 jobs:
   build:
     name: Compile Tweak
-    runs-on: macos-latest  # 必须使用 macOS 运行器（iOS 编译依赖 Xcode）
+    runs-on: macos-latest
 
     steps:
+      # 1. 获取代码
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Install Theos Dependencies
+      # 2. 安装依赖工具
+      - name: Install Dependencies
         run: |
-          # 安装 Theos 依赖工具链
-          brew install dpkg wget ldid
-          # 安装 iOS SDK（关键步骤，修复编译错误）
-          wget https://github.com/theos/sdks/archive/refs/heads/master.zip
-          unzip master.zip -d ~/theos/sdks
-          rm master.zip
+          brew install dpkg ldid
 
-      - name: Configure Theos
+      # 3. 下载 iOS SDK 头文件 (关键修复)
+      - name: Download iOS SDKs
         run: |
-          # 设置 THEOS 环境变量
-          echo "export THEOS=~/theos" >> $HOME/.zshrc
-          echo "export PATH=\$THEOS/bin:\$PATH" >> $HOME/.zshrc
-          echo "export THEOS_DEVICE_IP=127.0.0.1" >> $HOME/.zshrc  # 本地编译无需真机IP
-          source $HOME/.zshrc
+          # 创建目录
+          mkdir -p $HOME/theos/sdks
+          # 下载 SDK 压缩包并直接解压到目录
+          wget -qO- https://github.com/theos/sdks/archive/master.zip | bsdtar -xvf- -C $HOME/theos/sdks --strip-components=1
 
-          # 克隆 Theos 核心仓库
-          git clone --recursive https://github.com/theos/theos.git ~/theos
+      # 4. 克隆 Theos 核心 (使用官方仓库)
+      - name: Clone Theos
+        run: |
+          git clone --recursive https://github.com/theos/theos.git $HOME/theos
 
+      # 5. 设置环境变量
+      - name: Set Environment
+        run: |
+          echo "export THEOS=$HOME/theos" >> $GITHUB_ENV
+          echo "export PATH=\$THEOS/bin:\$PATH" >> $GITHUB_ENV
+          # 避免编译时寻找真机 IP
+          echo "export THEOS_DEVICE_IP=127.0.0.1" >> $GITHUB_ENV
+
+      # 6. 执行编译
       - name: Build Tweak
         run: |
-          # 进入项目目录（根据你的实际目录结构调整）
-          cd $GITHUB_WORKSPACE
+          # 指定 SDK 版本（请根据你的目标设备修改，如 16.4, 17.0）
+          make SDKVERSION=17.0 package FINALPACKAGE=1
 
-          # 执行编译（关键：指定 SDK 版本避免 "error: no such file or directory"）
-          make SDKVERSION=17.0  # 请替换为你的目标 iOS 版本（如 16.4, 17.0）
-
+      # 7. 上传产物 (修复版本过旧警告)
       - name: Upload Artifact
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4  # 必须升级到 v4
         with:
           name: compiled-tweak
-          path: ${{ github.workspace }}/*.deb  # 上传生成的 .deb 安装包
+          path: ${{ github.workspace }}/*.deb
