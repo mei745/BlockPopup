@@ -1,16 +1,18 @@
 # 指定目标平台和架构
-# 使用 latest 自动适配最新的 SDK 版本
 TARGET := iphone:clang:latest
 ARCHS := arm64 x86_64
 
-# --- 关键修复：强制使用旧版 Logos 语法 (%hook) ---
-# 因为你的 Tweak.xm 使用的是旧语法，而新版 Theos 默认使用新语法
+# --- 关键修复：忽略过时 API 的报错 ---
+# 告诉编译器不要因为使用了旧代码(如 UIAlertView)而报错
+THEOS_LDFLAGS += -Wno-deprecated-declarations
+
+# 强制使用旧版 Logos 语法 (%hook)
 THEOS_USE_LEAN_LOGOS=1
 
 # 指定要注入的进程
 INSTALL_TARGET_PROCESSES = SpringBoard
 
-# 指定 Tweak 名称 (需与 control 文件中的 Package 一致)
+# 指定 Tweak 名称
 TWEAK_NAME = mei745
 
 # 指定源文件
