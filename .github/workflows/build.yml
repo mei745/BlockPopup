@@ -21,32 +21,28 @@ jobs:
         run: |
           brew install dpkg ldid wget
 
-      # 3. 下载 iOS SDK (必须先下载到临时目录)
+      # 3. 下载 iOS SDK 
       - name: Download iOS SDKs
         run: |
-          # 1. 创建临时目录下载 SDK，避免和 Theos 目录冲突
           mkdir -p $HOME/sdks_temp
-          # 2. 下载并解压
-          wget -qO- https://github.com/theos/sdks/archive/master.zip | bsdtar -xvf- -C $HOME/sdks_temp --strip-components=1
+          # 增加重试次数和超时设置，防止网络波动导致失败
+          wget -t 3 --timeout=30 -qO- https://github.com/theos/sdks/archive/master.zip | bsdtar -xvf- -C $HOME/sdks_temp --strip-components=1
 
       # 4. 配置 Theos 环境
       - name: Configure Theos
         run: |
-          # 1. 设置环境变量
-          echo "THEOS=/opt/theos" >> $GITHUB_ENV
-          echo "/opt/theos/bin" >> $GITHUB_PATH
-
-          # 2. 确保 /opt/theos 是干净的 (强制删除旧文件)
+          # 设置环境变量 (使用 sudo 时可能需要传递环境变量，直接写入文件更稳定)
+          echo "THEOS=/opt/theos" | sudo tee -a /etc/profile
+          echo "/opt/theos/bin" | sudo tee -a /etc/paths
+          
           sudo rm -rf /opt/theos
-
-          # 3. 克隆 Theos
-          sudo git clone --recursive https://github.com/theos/theos.git /opt/theos
-
-          # 4. 将刚才下载的 SDK 移动到 Theos 目录
-          sudo mv $HOME/sdks_temp /opt/theos/sdks
-
-          # 5. 验证 SDK 是否存在
-          ls /opt/theos/sdks
+          # 增加 --depth=1 减少克隆时间
+          sudo git clone --recursive --depth=1 https://github.com/theos/theos.git /opt/theos
+          
+          # 移动 SDK
+          sudo mv $HOME/sdks_temp/* /opt/theos/sdks/ 2>/dev/null || true
+          # 查看结果
+          ls -la /opt/theos/sdks/
 
       # 5. 编译插件 (自动适配 SDK 版本)
       - name: Build Tweak
