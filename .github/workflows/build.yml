@@ -12,45 +12,36 @@ jobs:
     runs-on: macos-latest
 
     steps:
-      # 1. 获取代码
       - name: Checkout code
         uses: actions/checkout@v4
 
-      # 2. 安装依赖工具
       - name: Install Dependencies
         run: |
           brew install dpkg ldid
 
-      # 3. 下载 iOS SDK 头文件 (关键修复)
       - name: Download iOS SDKs
         run: |
-          # 创建目录
           mkdir -p $HOME/theos/sdks
-          # 下载 SDK 压缩包并直接解压到目录
           wget -qO- https://github.com/theos/sdks/archive/master.zip | bsdtar -xvf- -C $HOME/theos/sdks --strip-components=1
 
-      # 4. 克隆 Theos 核心 (使用官方仓库)
-      - name: Clone Theos
+      - name: Configure Theos
         run: |
+          # 修复：先删除旧目录，再克隆
+          rm -rf $HOME/theos
           git clone --recursive https://github.com/theos/theos.git $HOME/theos
+          
+          # 设置环境变量
+          echo "THEOS=$HOME/theos" >> $GITHUB_ENV
+          echo "$HOME/theos/bin" >> $GITHUB_PATH
+          echo "THEOS_DEVICE_IP=127.0.0.1" >> $GITHUB_ENV
 
-      # 5. 设置环境变量
-      - name: Set Environment
-        run: |
-          echo "export THEOS=$HOME/theos" >> $GITHUB_ENV
-          echo "export PATH=\$THEOS/bin:\$PATH" >> $GITHUB_ENV
-          # 避免编译时寻找真机 IP
-          echo "export THEOS_DEVICE_IP=127.0.0.1" >> $GITHUB_ENV
-
-      # 6. 执行编译
       - name: Build Tweak
         run: |
-          # 指定 SDK 版本（请根据你的目标设备修改，如 16.4, 17.0）
+          cd $GITHUB_WORKSPACE
           make SDKVERSION=17.0 package FINALPACKAGE=1
 
-      # 7. 上传产物 (修复版本过旧警告)
       - name: Upload Artifact
-        uses: actions/upload-artifact@v4  # 必须升级到 v4
+        uses: actions/upload-artifact@v4
         with:
           name: compiled-tweak
           path: ${{ github.workspace }}/*.deb
