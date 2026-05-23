@@ -3,66 +3,52 @@
 #import <objc/runtime.h>
 
 // ==========================================
-// 核心配置区：插件弹窗特征词 (已更新最新截图关键词)
-// ==========================================
-static NSArray *kBlockKeywords = @[
-    // --- 针对最新两张截图的精准打击 ---
-    @"售后及续费",    // 截图1标题
-    @"授权卡密",      // 截图1输入框提示
-    @"激活码不存在",  // 截图2标题
-    @"请输入您的授权", // 截图2输入框提示
-
-    // --- 针对之前截图的通用打击 ---
-    @"请注意", @"盗版", @"正版下载", @"停止使用", @"封号",
-    @"续费提醒", @"授权即将到期", @"朕知道了",
-    @"输入授权码", @"微信号与授权码绑定", @"重新购买",
-    @"授权已到期", @"立即申请",
-    @"激活", @"卡密", @"微密友", @"蜘蛛密友",
-    @"充值", @"购买", @"赞助", @"捐赠", @"试用", @"过期"
-];
-
-// ==========================================
-// 核心逻辑：拦截弹窗创建
+// 暴力模式：只要标题或内容不为空，一律拦截
+// 如果你想保留极少数微信弹窗，请看下面的“微调区”
 // ==========================================
 
 %hook UIAlertController
 
-// 拦截初始化方法
+// 拦截所有试图显示标题和内容的弹窗
 - (instancetype)initWithTitle:(NSString *)title message:(NSString *)message preferredStyle:(UIAlertControllerStyle)preferredStyle {
-    // 合并标题和内容进行检查
-    NSString *checkString = [NSString stringWithFormat:@"%@%@", title, message];
-
-    // 遍历黑名单
-    for (NSString *keyword in kBlockKeywords) {
-        if ([checkString containsString:keyword]) {
-            // 🛑 发现匹配！直接返回 nil
-            NSLog(@"[Tweak] 拦截到插件弹窗: %@", keyword);
-            return nil;
-        }
+    
+    // --- 微调区：如果你想保留微信自带的某些提示，可以在这里加例外 ---
+    // 比如：如果标题是空，或者标题包含“微信”，就放行（通常微信系统提示比较克制）
+    // 但根据你的情况，建议直接全部杀掉，所以这里不做例外处理。
+    
+    // 如果标题或内容有字，直接返回 nil（不让弹窗出生）
+    if ((title && title.length > 0) || (message && message.length > 0)) {
+        // 这里可以加一行日志方便调试，但在暴力模式下，我们直接杀
+        // NSLog(@"[暴力拦截] 拦截了一个弹窗: %@", title);
+        return nil; 
     }
 
-    // ✅ 安全，放行
+    // 如果啥都没有（纯空弹窗），放行（极少情况）
     return %orig;
 }
 
 %end
 
 // ==========================================
-// 额外保险：拦截旧式弹窗 (UIAlertView)
+// 第二道防线：拦截古老弹窗 (UIAlertView)
+// 很多插件弹窗卡死就是因为这个旧接口
 // ==========================================
 %hook UIAlertView
 
 - (id)initWithTitle:(NSString *)title message:(NSString *)message delegate:(id)delegate cancelButtonTitle:(NSString *)cancelButtonTitle otherButtonTitles:(NSString *)otherButtonTitles, ... {
-    NSString *checkString = [NSString stringWithFormat:@"%@%@", title, message];
-
-    for (NSString *keyword in kBlockKeywords) {
-        if ([checkString containsString:keyword]) {
-            NSLog(@"[Tweak] 拦截到旧式插件弹窗: %@", keyword);
-            return nil;
-        }
+    // 只要有标题或内容，直接杀掉
+    if ((title && title.length > 0) || (message && message.length > 0)) {
+        NSLog(@"[暴力拦截] 拦截了一个古老弹窗: %@", title);
+        return nil;
     }
-
     return %orig;
+}
+
+// 额外拦截 show 方法，防止有些弹窗已经创建好了试图强弹
+- (void)show {
+    // 直接不调用 %orig，让它静默失效
+    NSLog(@"[暴力拦截] 阻止了一个古老弹窗的显示动作");
+    return; 
 }
 
 %end
