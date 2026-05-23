@@ -23,7 +23,7 @@ static NSArray *kBlockKeywords = @[
     @"捐赠", @"赞助", @"PayPal", @"Alipay", @"WeChat Pay",
     @"售后", @"联系QQ", @"输入密码",@"联系",
     // 针对最新截图补充的词
-    @"充值", @"请输入充值", @"确认充值", @"复制我的授权码", @"蜘蛛密友"
+    @"充值", @"请输入充值", @"确认充值", @"复制我的授权码", @"蜘蛛密友", // <--- 这里之前少了逗号
     @"激活", @"卡密", @"微密友", @"蜘蛛密友", @"授权码",
     @"充值", @"购买", @"赞助", @"捐赠", @"试用", @"过期"
 ];
@@ -34,14 +34,6 @@ static NSArray *kBlockKeywords = @[
 // ==========================================
 
 %hook UIAlertController
-
-// 拦截 alloc 方法
-+ (instancetype)alloc {
-    // 获取调用堆栈，判断是谁在尝试弹窗
-    // 注意：这里我们主要检查即将初始化的内容，但在 alloc 阶段很难直接拿到 title/message
-    // 所以我们需要配合 init 方法进行双重保险
-    return %orig;
-}
 
 // 拦截初始化方法，这时候已经有标题和内容了
 - (instancetype)initWithTitle:(NSString *)title message:(NSString *)message preferredStyle:(UIAlertControllerStyle)preferredStyle {
