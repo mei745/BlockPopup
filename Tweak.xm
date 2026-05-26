@@ -2,108 +2,91 @@
 #import <Foundation/Foundation.h>
 
 // ==========================================
-// 配置区域：在这里添加你想屏蔽的关键词
+// 配置区域：关键词库
 // ==========================================
 static NSArray *kBlockKeywords = @[
     @"激活", @"授权", @"激活码", @"注册", @"正版", @"正版验证",
-    @"注意", @"微密友", @"盗版", @"更新", @"激活",@"卡密",
+    @"注意", @"微密友", @"盗版", @"更新", @"卡密",
     @"插件", @"license", @"activation", @"key", @"破解",
     @"警告", @"提示", @"试用", @"购买", @"续费", @"过期",
-    @"捐赠", @"赞助", @"PayPal", @"Alipay", @"WeChat Pay"
+    @"捐赠", @"赞助", @"PayPal", @"Alipay", @"WeChat Pay",
+    // 补充你截图里的词
+    @"售后", @"请输入您的授权", @"朕知道了", @"2440841046"
 ];
 
-// 工具函数：判断字符串是否包含关键词
+// 工具函数：判断是否包含关键词
 static BOOL ContainsBlockKeyword(NSString *text) {
     if (!text || text.length == 0) return NO;
-
-    // 转小写，提高匹配率
     NSString *lowerText = [text lowercaseString];
-
     for (NSString *keyword in kBlockKeywords) {
-        NSString *lowerKeyword = [keyword lowercaseString];
-        if ([lowerText containsString:lowerKeyword]) {
+        if ([lowerText containsString:[keyword lowercaseString]]) {
             return YES;
         }
     }
     return NO;
 }
 
+// ==========================================
+// 第一层拦截：UIAlertController (现代弹窗)
+// 核心策略：在 init 阶段直接杀掉，速度最快
+// ==========================================
 %hook UIAlertController
 
-// Hook 弹窗显示的方法
-- (void)viewWillAppear:(BOOL)animated {
-    %orig; // 先调用原方法，确保对象初始化完成
+- (instancetype)initWithTitle:(NSString *)title message:(NSString *)message preferredStyle:(UIAlertControllerStyle)preferredStyle {
 
-    // 1. 只处理 Alert 样式，放过底部的 ActionSheet
-    if (self.preferredStyle != UIAlertControllerStyleAlert) {
-        return;
-    }
-
-    // 2. 检查标题和内容
+    // 1. 检查标题和内容
     BOOL shouldBlock = NO;
-
-    if (ContainsBlockKeyword(self.title)) {
+    if (ContainsBlockKeyword(title) || ContainsBlockKeyword(message)) {
         shouldBlock = YES;
     }
 
-    if (!shouldBlock && ContainsBlockKeyword(self.message)) {
-        shouldBlock = YES;
+    // 2. 如果命中关键词，直接返回 nil (不创建对象)
+    if (shouldBlock) {
+        NSLog(@"[BlockPopup] 🚀 极速拦截 (Init阶段): %@", title ?: message);
+        return nil;
     }
 
-    // 3. (进阶) 检查按钮文字
-    if (!shouldBlock) {
-        for (UIAlertAction *action in self.actions) {
-            if (ContainsBlockKeyword(action.title)) {
-                shouldBlock = YES;
-                break;
-            }
+    // 3. 没命中，正常创建
+    return %orig;
+}
+
+// 补漏：防止某些奇葩写法绕过了 init
+- (void)viewWillAppear:(BOOL)animated {
+    %orig;
+    // 如果漏网之鱼到了这一步，依然检查并关闭
+    if (self.preferredStyle == UIAlertControllerStyleAlert) {
+        if (ContainsBlockKeyword(self.title) || ContainsBlockKeyword(self.message)) {
+             [self dismissViewControllerAnimated:NO completion:nil];
         }
     }
-
-    // 4. 执行拦截
-    if (shouldBlock) {
-        NSLog(@"[BlockPopup] 🚫 已拦截恶意弹窗: %@", self.title ?: self.message);
-
-        // 延迟极短时间关闭，防止界面卡死
-        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.1 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-            [self dismissViewControllerAnimated:NO completion:nil];
-        });
-    }
 }
 
-// ==========================================
-// 关键修复：
-// %new 必须写在 %hook 的大括号内部，且在 %end 之前
-// ==========================================
-%new
-- (void)blockPopup_dismissImmediately {
-    [self dismissViewControllerAnimated:NO completion:nil];
-}
-%end // %hook UIAlertController 结束
+%end
 
 // ==========================================
-// 额外防御：针对老式 UIAlertView
+// 第二层拦截：UIAlertView (老式弹窗)
+// 核心策略：拦截 show 方法，不让它显示
 // ==========================================
 %hook UIAlertView
 
 - (void)show {
     BOOL shouldBlock = NO;
 
+    // 检查标题、内容、按钮文字
     if (ContainsBlockKeyword(self.title) || ContainsBlockKeyword(self.message)) {
         shouldBlock = YES;
-    }
-
-    // 检查按钮
-    for (int i = 0; i < self.numberOfButtons; i++) {
-        if (ContainsBlockKeyword([self buttonTitleAtIndex:i])) {
-            shouldBlock = YES;
-            break;
+    } else {
+        for (int i = 0; i < self.numberOfButtons; i++) {
+            if (ContainsBlockKeyword([self buttonTitleAtIndex:i])) {
+                shouldBlock = YES;
+                break;
+            }
         }
     }
 
     if (shouldBlock) {
-        NSLog(@"[BlockPopup] 🚫 已拦截老式弹窗: %@", self.title);
-        return; // 直接不调用 %orig，弹窗就不会显示
+        NSLog(@"[BlockPopup] 🚀 极速拦截 (UIAlertView): %@", self.title);
+        return; // 直接 return，不调用 %orig，弹窗就不会出来
     }
 
     %orig;
