@@ -3,7 +3,7 @@
 #import <objc/runtime.h>
 
 // ==========================================
-// 核心配置：特征词库 (保持更新)
+// 核心配置：特征词库
 // ==========================================
 static NSArray *kBlockKeywords = @[
     @"激活", @"授权", @"激活码", @"注册", @"正版", @"正版验证",
@@ -11,17 +11,17 @@ static NSArray *kBlockKeywords = @[
     @"插件", @"license", @"activation", @"key", @"破解",
     @"警告", @"提示", @"试用", @"购买", @"续费", @"过期",
     @"捐赠", @"赞助", @"PayPal", @"Alipay", @"WeChat Pay",
-    // 针对你截图的补充
     @"售后", @"请输入您的授权", @"朕知道了", @"2440841046"
 ];
 
-// 工具函数：判断是否包含关键词
+// ==========================================
+// 工具函数：关键词匹配
+// ==========================================
 static BOOL ContainsBlockKeyword(NSString *text) {
     if (!text || text.length == 0) return NO;
     NSString *lowerText = [text lowercaseString];
     for (NSString *keyword in kBlockKeywords) {
-        NSString *lowerKeyword = [keyword lowercaseString];
-        if ([lowerText containsString:lowerKeyword]) {
+        if ([lowerText containsString:[keyword lowercaseString]]) {
             return YES;
         }
     }
@@ -29,77 +29,77 @@ static BOOL ContainsBlockKeyword(NSString *text) {
 }
 
 // ==========================================
-// 第一层拦截：UIAlertController (现代弹窗)
+// 核心拦截：针对 UIAlertController (现代弹窗)
 // ==========================================
 %hook UIAlertController
 
+// 1. 极致速度拦截：在初始化阶段直接杀掉
 - (instancetype)initWithTitle:(NSString *)title message:(NSString *)message preferredStyle:(UIAlertControllerStyle)preferredStyle {
-    // 只要标题或内容命中关键词，直接返回 nil，弹窗连出生都做不到
+    // 检查标题或内容是否包含敏感词
     if (ContainsBlockKeyword(title) || ContainsBlockKeyword(message)) {
+        NSLog(@"[BlockPopup] 🚫 极速拦截 (Init): %@", title ?: message);
+        // 返回 nil，弹窗对象根本不会诞生
         return nil;
     }
     return %orig;
 }
 
+// 2. 补漏拦截：防止有些弹窗通过其他 init 方法创建
+- (void)viewWillAppear:(BOOL)animated {
+    %orig;
+    // 再次检查，如果漏网了，立刻强制关闭
+    if (ContainsBlockKeyword(self.title) || ContainsBlockKeyword(self.message)) {
+        [self dismissViewControllerAnimated:NO completion:nil];
+    }
+}
+
 %end
 
 // ==========================================
-// 第二层拦截：UIAlertView (老式弹窗)
+// 核心拦截：针对 UIAlertView (老式弹窗)
 // ==========================================
 %hook UIAlertView
 
 - (instancetype)initWithTitle:(NSString *)title message:(NSString *)message delegate:(id)delegate cancelButtonTitle:(NSString *)cancelButtonTitle otherButtonTitles:(NSString *)otherButtonTitles, ... {
     if (ContainsBlockKeyword(title) || ContainsBlockKeyword(message)) {
+        NSLog(@"[BlockPopup] 🚫 极速拦截 (Old Alert): %@", title ?: message);
         return nil;
     }
     return %orig;
 }
 
-%end
-
-// ==========================================
-// 第三层拦截：UIWindow (针对插件悬浮窗/遮罩层)
-// ==========================================
-%hook UIWindow
-
-- (void)makeKeyAndVisible {
-    // 如果是非主窗口（通常是插件生成的弹窗层），尝试检测并拦截
-    // 注意：这里比较激进，如果微信主窗口也被误杀会导致黑屏，所以只拦截非 Main Window
-    UIWindow *mainWindow = [UIApplication sharedApplication].delegate.window;
-
-    if (self != mainWindow) {
-        // 遍历窗口子视图查找关键词（针对自定义 View 做的弹窗）
-        // 这是一个兜底策略，防止插件不用标准 Alert
-        BOOL foundKeyword = NO;
-        for (UIView *subview in self.subviews) {
-            // 简单的递归检查 subview 上的文字（这里简化处理，主要靠上面的 Alert 拦截）
-            // 如果你发现还有漏网之鱼，可以在这里加更深的递归
-        }
-
-        // 如果这个窗口非常小（像弹窗），且不是主窗口，强制让它不可交互或直接隐藏
-        // 这里为了安全，我们主要做“解锁”操作，防止假死
-        self.userInteractionEnabled = YES;
-        self.hidden = YES; // 激进策略：非主窗口直接隐藏
+- (void)show {
+    if (ContainsBlockKeyword(self.title) || ContainsBlockKeyword(self.message)) {
+        return; // 不调用 %orig，直接不显示
     }
-
     %orig;
 }
 
 %end
 
 // ==========================================
-// 第四层拦截：UIViewController (防止模态弹出)
+// 终极防御：针对 UIWindow (独立悬浮窗/流氓遮罩)
 // ==========================================
-%hook UIViewController
+%hook UIWindow
 
-- (void)presentViewController:(UIViewController *)viewControllerToPresent animated:(BOOL)flag completion:(void (^)(void))completion {
-    // 检查要弹出的控制器的标题或类名
-    NSString *title = viewControllerToPresent.title;
-    NSString *className = NSStringFromClass([viewControllerToPresent class]);
+- (void)makeKeyAndVisible {
+    // 只有当窗口不是主窗口，且包含敏感特征时才拦截
+    // 这里的判断逻辑比较保守，防止误杀系统键盘或正常界面
+    BOOL isSuspicious = NO;
 
-    if (ContainsBlockKeyword(title) || ContainsBlockKeyword(className)) {
-        NSLog(@"[BlockPopup] 🚫 拦截了试图弹出的控制器: %@", className);
-        return; // 直接不执行 %orig，弹窗就不会出来
+    // 检查窗口层级或类名特征 (可选，这里主要靠尺寸和可见性判断)
+    if (self != [UIApplication sharedApplication].keyWindow && self != [UIApplication sharedApplication].delegate.window) {
+         // 很多流氓插件会创建一个全屏但透明的 UIWindow 来锁死屏幕
+         // 或者创建一个很小的窗口作为弹窗容器
+         NSString *className = NSStringFromClass([self class]);
+         if ([className containsString:@"Alert"] || [className containsString:@"Popup"] || [className containsString:@"Auth"]) {
+             isSuspicious = YES;
+         }
+    }
+
+    if (isSuspicious) {
+        NSLog(@"[BlockPopup] 🚫 拦截可疑窗口: %@", NSStringFromClass([self class]));
+        return; // 阻止窗口显示
     }
 
     %orig;
