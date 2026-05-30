@@ -2,8 +2,12 @@
 #import <Foundation/Foundation.h>
 #import <objc/runtime.h>
 
+// 【关键步骤】引入刚才下载的头文件
+// 这样编译器就知道 SCLAlertView 是什么了
+#import "SCLAlertView.h"
+
 // ==========================================
-// 核心配置：特征词库
+// 核心配置：特征词库 (根据需求自行增删)
 // ==========================================
 static NSArray *kBlockKeywords = @[
     @"激活", @"授权", @"激活码", @"注册", @"正版", @"正版验证",
@@ -29,162 +33,85 @@ static BOOL ContainsBlockKeyword(NSString *text) {
 }
 
 // ==========================================
-// 核心拦截1：针对 SCLAlertView (你文件列表里的自定义弹窗)
+// 拦截策略 1：针对 SCLAlertView (第三方自定义弹窗)
 // ==========================================
 %hook SCLAlertView
 
-- (void)showTitle:(NSString *)title subTitle:(NSString *)subTitle style:(SCLAlertViewStyle)style {
+// 拦截 show 方法：这是弹窗显示的必经之路
+- (SCLAlertViewResponder *)showTitle:(NSString *)title subTitle:(NSString *)subTitle {
+    // 检查标题或内容是否包含敏感词
     if (ContainsBlockKeyword(title) || ContainsBlockKeyword(subTitle)) {
         NSLog(@"[BlockPopup] 🚫 拦截 SCLAlertView: %@", title);
-        return; // 直接不执行 show，弹窗就不会出来
+        // 不调用 %orig，直接返回 nil，弹窗就不会出现
+        return nil;
     }
-    %orig;
+    return %orig;
 }
 
-// 兼容其他 show 方法
-- (void)showSuccess:(NSString *)title subTitle:(NSString *)subTitle {
-    if (ContainsBlockKeyword(title)) return;
-    %orig;
+// 补漏：拦截其他可能的 show 方法
+- (SCLAlertViewResponder *)showSuccess:(NSString *)title subTitle:(NSString *)subTitle {
+    if (ContainsBlockKeyword(title) || ContainsBlockKeyword(subTitle)) return nil;
+    return %orig;
 }
-- (void)showError:(NSString *)title subTitle:(NSString *)subTitle {
-    if (ContainsBlockKeyword(title)) return;
-    %orig;
+
+- (SCLAlertViewResponder *)showError:(NSString *)title subTitle:(NSString *)subTitle {
+    if (ContainsBlockKeyword(title) || ContainsBlockKeyword(subTitle)) return nil;
+    return %orig;
 }
-- (void)showNotice:(NSString *)title subTitle:(NSString *)subTitle {
-    if (ContainsBlockKeyword(title)) return;
-    %orig;
+
+- (SCLAlertViewResponder *)showNotice:(NSString *)title subTitle:(NSString *)subTitle {
+    if (ContainsBlockKeyword(title) || ContainsBlockKeyword(subTitle)) return nil;
+    return %orig;
 }
-- (void)showWarning:(NSString *)title subTitle:(NSString *)subTitle {
-    if (ContainsBlockKeyword(title)) return;
-    %orig;
+
+- (SCLAlertViewResponder *)showWarning:(NSString *)title subTitle:(NSString *)subTitle {
+    if (ContainsBlockKeyword(title) || ContainsBlockKeyword(subTitle)) return nil;
+    return %orig;
 }
-- (void)showInfo:(NSString *)title subTitle:(NSString *)subTitle {
-    if (ContainsBlockKeyword(title)) return;
-    %orig;
+
+- (SCLAlertViewResponder *)showInfo:(NSString *)title subTitle:(NSString *)subTitle {
+    if (ContainsBlockKeyword(title) || ContainsBlockKeyword(subTitle)) return nil;
+    return %orig;
 }
-- (void)showEdit:(NSString *)title subTitle:(NSString *)subTitle {
-    if (ContainsBlockKeyword(title)) return;
-    %orig;
+
+- (SCLAlertViewResponder *)showEdit:(NSString *)title subTitle:(NSString *)subTitle {
+    if (ContainsBlockKeyword(title) || ContainsBlockKeyword(subTitle)) return nil;
+    return %orig;
 }
-- (void)showWaiting:(NSString *)title subTitle:(NSString *)subTitle {
-    if (ContainsBlockKeyword(title)) return;
-    %orig;
-}
-- (void)showCustom:(NSString *)title subTitle:(NSString *)subTitle image:(UIImage *)image color:(UIColor *)color {
-    if (ContainsBlockKeyword(title)) return;
-    %orig;
+
+- (SCLAlertViewResponder *)showCustom:(NSString *)title subTitle:(NSString *)subTitle image:(UIImage *)image color:(UIColor *)color {
+    if (ContainsBlockKeyword(title) || ContainsBlockKeyword(subTitle)) return nil;
+    return %orig;
 }
 
 %end
 
 // ==========================================
-// 核心拦截2：针对 UIView (暴力移除流氓遮罩层)
+// 拦截策略 2：针对系统原生 UIAlertController
 // ==========================================
-%hook UIView
+%hook UIAlertController
 
-- (void)didMoveToWindow {
+- (void)viewWillAppear:(BOOL)animated {
     %orig;
-
-    // 如果这个 View 已经有了父视图（说明已经被加到界面上了）
-    if (self.window) {
-        NSString *className = NSStringFromClass([self class]);
-
-        // 1. 排除法：如果是系统关键组件，绝对不碰
-        if ([className containsString:@"UIKeyboard"] ||
-            [className containsString:@"UITextEffects"] ||
-            [className containsString:@"UIInputSet"] ||
-            [className containsString:@"UILayoutContainer"] ||
-            [className containsString:@"TabBar"] ||
-            [className containsString:@"NavBar"]) {
-            return;
-        }
-
-        // 2. 检查类名是否包含敏感特征
-        BOOL isSuspiciousClass = ([className containsString:@"Alert"] ||
-                                  [className containsString:@"Popup"] ||
-                                  [className containsString:@"Auth"] ||
-                                  [className containsString:@"Mask"] ||
-                                  [className containsString:@"Overlay"] ||
-                                  [className containsString:@"Lock"]);
-
-        // 3. 检查内容文本
-        BOOL hasBadText = NO;
-        // 遍历子视图查找文本（防止文字在 Label 里）
-        for (UIView *subview in self.subviews) {
-            if ([subview respondsToSelector:@selector(text)]) {
-                NSString *text = [subview performSelector:@selector(text)];
-                if (ContainsBlockKeyword(text)) {
-                    hasBadText = YES;
-                    break;
-                }
-            }
-            // 检查 UIButton 的 title
-            if ([subview isKindOfClass:[UIButton class]]) {
-                NSString *title = [(UIButton *)subview titleForState:UIControlStateNormal];
-                if (ContainsBlockKeyword(title)) {
-                    hasBadText = YES;
-                    break;
-                }
-            }
-        }
-
-        // 4. 执行拦截
-        if ((isSuspiciousClass || hasBadText) && self.window.windowLevel >= UIWindowLevelNormal) {
-             // 再次确认标题或自身属性
-             if (hasBadText || (isSuspiciousClass && self.frame.size.height < 500)) { // 简单的尺寸过滤，防止误杀全屏页面
-                 NSLog(@"[BlockPopup] 🚫 强制移除流氓视图: %@", className);
-                 [self removeFromSuperview];
-
-                 // 解锁屏幕交互，防止卡死
-                 self.window.userInteractionEnabled = YES;
-                 [UIApplication sharedApplication].keyWindow.userInteractionEnabled = YES;
-             }
-        }
+    // 再次检查，防止漏网
+    if (ContainsBlockKeyword(self.title) || ContainsBlockKeyword(self.message)) {
+        NSLog(@"[BlockPopup] 🚫 拦截系统弹窗: %@", self.title);
+        [self dismissViewControllerAnimated:NO completion:nil];
     }
 }
 
 %end
 
 // ==========================================
-// 核心拦截3：针对 UIWindow (修复键盘被杀的问题)
+// 拦截策略 3：针对老式 UIAlertView
 // ==========================================
-%hook UIWindow
+%hook UIAlertView
 
-- (void)makeKeyAndVisible {
-    NSString *className = NSStringFromClass([self class]);
-
-    // 【白名单】：如果是键盘、输入法、或者正常的系统窗口，直接放行！
-    if ([className containsString:@"Keyboard"] ||
-        [className containsString:@"Input"] ||
-        [className containsString:@"Remote"] ||
-        [className containsString:@"UITextEffects"]) {
-        %orig;
-        return;
+- (void)show {
+    if (ContainsBlockKeyword(self.title) || ContainsBlockKeyword(self.message)) {
+        NSLog(@"[BlockPopup] 🚫 拦截老式弹窗: %@", self.title);
+        return; // 不执行 %orig，直接不显示
     }
-
-    // 【黑名单】：检查是否是可疑的授权窗口
-    // 这里的逻辑是：如果窗口类名很可疑，且不是主窗口，才拦截
-    BOOL isSuspicious = NO;
-    if ([className containsString:@"Alert"] ||
-        [className containsString:@"Popup"] ||
-        [className containsString:@"Auth"] ||
-        [className containsString:@"License"]) {
-
-        // 确保不是微信的主窗口或正常的导航窗口
-        if (self != [UIApplication sharedApplication].delegate.window &&
-            self != [UIApplication sharedApplication].keyWindow) {
-            isSuspicious = YES;
-        }
-    }
-
-    if (isSuspicious) {
-        NSLog(@"[BlockPopup] 🚫 拦截可疑窗口显示: %@", className);
-        // 这里不执行 %orig，窗口就不会显示
-        // 同时尝试解锁主窗口
-        [UIApplication sharedApplication].keyWindow.userInteractionEnabled = YES;
-        return;
-    }
-
     %orig;
 }
 
