@@ -3,22 +3,25 @@
 #import <objc/runtime.h>
 
 // ==========================================
-// 核心配置区
+// 核心配置：特征词库
 // ==========================================
-// 在这里定义需要屏蔽的弹窗关键词（支持模糊匹配）
-static NSArray *sensitiveKeywords() {
-    return @[
-        @"激活", @"授权", @"注册", @"正版", @"购买", @"续费",
-        @"试用", @"过期", @"License", @"Activation", @"VIP",
-        @"付费", @"解锁", @"Pro"
-    ];
-}
+static NSArray *kBlockKeywords = @[
+    @"激活", @"授权", @"激活码", @"注册", @"正版", @"正版验证",
+    @"注意", @"微密友", @"盗版", @"更新", @"卡密",
+    @"插件", @"license", @"activation", @"key", @"破解",
+    @"警告", @"提示", @"试用", @"购买", @"续费", @"过期",
+    @"捐赠", @"赞助", @"PayPal", @"Alipay", @"WeChat Pay",
+    @"售后", @"请输入您的授权", @"朕知道了", @"2440841046"
+];
 
-// 判断字符串是否包含敏感词
-static BOOL isSensitiveContent(NSString *text) {
+// ==========================================
+// 工具函数：关键词匹配
+// ==========================================
+static BOOL ContainsBlockKeyword(NSString *text) {
     if (!text || text.length == 0) return NO;
-    for (NSString *keyword in sensitiveKeywords()) {
-        if ([text rangeOfString:keyword options:NSCaseInsensitiveSearch].location != NSNotFound) {
+    NSString *lowerText = [text lowercaseString];
+    for (NSString *keyword in kBlockKeywords) {
+        if ([lowerText containsString:[keyword lowercaseString]]) {
             return YES;
         }
     }
@@ -26,49 +29,80 @@ static BOOL isSensitiveContent(NSString *text) {
 }
 
 // ==========================================
-// Hook SCLAlertView (第三方弹窗库)
+// 核心拦截：针对 UIAlertController (现代弹窗)
 // ==========================================
-%hook SCLAlertView
+%hook UIAlertController
 
-- (void)showTitle:(NSString *)title subTitle:(NSString *)subTitle style:(NSInteger)style {
-    // 1. 检查标题或副标题是否包含敏感词
-    BOOL shouldBlock = isSensitiveContent(title) || isSensitiveContent(subTitle);
-
-    if (shouldBlock) {
-        // 如果包含敏感词，直接拦截，不执行原来的 show 方法
-        NSLog(@"[BlockPopup] 已拦截 SCLAlertView 弹窗: %@", title);
-        return;
+// 1. 极致速度拦截：在初始化阶段直接杀掉
+- (instancetype)initWithTitle:(NSString *)title message:(NSString *)message preferredStyle:(UIAlertControllerStyle)preferredStyle {
+    // 检查标题或内容是否包含敏感词
+    if (ContainsBlockKeyword(title) || ContainsBlockKeyword(message)) {
+        NSLog(@"[BlockPopup] 🚫 极速拦截 (Init): %@", title ?: message);
+        // 返回 nil，弹窗对象根本不会诞生
+        return nil;
     }
-
-    // 2. 如果不包含敏感词，放行（执行原方法）
-    %orig;
+    return %orig;
 }
 
-// 备用拦截：防止通过其他方式初始化
-- (void)showView:(UIView *)view {
-    // 这里很难获取标题，通常直接放行，主要靠上面的 showTitle 拦截
+// 2. 补漏拦截：防止有些弹窗通过其他 init 方法创建
+- (void)viewWillAppear:(BOOL)animated {
+    %orig;
+    // 再次检查，如果漏网了，立刻强制关闭
+    if (ContainsBlockKeyword(self.title) || ContainsBlockKeyword(self.message)) {
+        [self dismissViewControllerAnimated:NO completion:nil];
+    }
+}
+
+%end
+
+// ==========================================
+// 核心拦截：针对 UIAlertView (老式弹窗)
+// ==========================================
+%hook UIAlertView
+
+- (instancetype)initWithTitle:(NSString *)title message:(NSString *)message delegate:(id)delegate cancelButtonTitle:(NSString *)cancelButtonTitle otherButtonTitles:(NSString *)otherButtonTitles, ... {
+    if (ContainsBlockKeyword(title) || ContainsBlockKeyword(message)) {
+        NSLog(@"[BlockPopup] 🚫 极速拦截 (Old Alert): %@", title ?: message);
+        return nil;
+    }
+    return %orig;
+}
+
+- (void)show {
+    if (ContainsBlockKeyword(self.title) || ContainsBlockKeyword(self.message)) {
+        return; // 不调用 %orig，直接不显示
+    }
     %orig;
 }
 
 %end
 
 // ==========================================
-// Hook UIAlertController (系统原生弹窗)
+// 终极防御：针对 UIWindow (独立悬浮窗/流氓遮罩)
 // ==========================================
-%hook UIAlertController
+%hook UIWindow
 
-- (void)viewWillAppear:(BOOL)animated {
-    %orig;
+- (void)makeKeyAndVisible {
+    // 只有当窗口不是主窗口，且包含敏感特征时才拦截
+    // 这里的判断逻辑比较保守，防止误杀系统键盘或正常界面
+    BOOL isSuspicious = NO;
 
-    // 获取弹窗标题
-    NSString *title = [self valueForKey:@"title"];
-    NSString *message = [self valueForKey:@"message"];
-
-    if (isSensitiveContent(title) || isSensitiveContent(message)) {
-        NSLog(@"[BlockPopup] 已拦截系统弹窗: %@", title);
-        // 强制关闭弹窗
-        [self dismissViewControllerAnimated:NO completion:nil];
+    // 检查窗口层级或类名特征 (可选，这里主要靠尺寸和可见性判断)
+    if (self != [UIApplication sharedApplication].keyWindow && self != [UIApplication sharedApplication].delegate.window) {
+         // 很多流氓插件会创建一个全屏但透明的 UIWindow 来锁死屏幕
+         // 或者创建一个很小的窗口作为弹窗容器
+         NSString *className = NSStringFromClass([self class]);
+         if ([className containsString:@"Alert"] || [className containsString:@"Popup"] || [className containsString:@"Auth"]) {
+             isSuspicious = YES;
+         }
     }
+
+    if (isSuspicious) {
+        NSLog(@"[BlockPopup] 🚫 拦截可疑窗口: %@", NSStringFromClass([self class]));
+        return; // 阻止窗口显示
+    }
+
+    %orig;
 }
 
 %end
