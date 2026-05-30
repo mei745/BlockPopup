@@ -2,30 +2,12 @@
 #import <Foundation/Foundation.h>
 #import <objc/runtime.h>
 
-// 【关键步骤】引入刚才下载的头文件
-// 这样编译器就知道 SCLAlertView 是什么了
-#import "SCLAlertView.h"
-
-// ==========================================
-// 核心配置：特征词库 (根据需求自行增删)
-// ==========================================
-static NSArray *kBlockKeywords = @[
-    @"激活", @"授权", @"激活码", @"注册", @"正版", @"正版验证",
-    @"注意", @"微密友", @"盗版", @"更新", @"卡密",
-    @"插件", @"license", @"activation", @"key", @"破解",
-    @"警告", @"提示", @"试用", @"购买", @"续费", @"过期",
-    @"捐赠", @"赞助", @"PayPal", @"Alipay", @"WeChat Pay",
-    @"售后", @"请输入您的授权", @"朕知道了", @"2440841046"
-];
-
-// ==========================================
-// 工具函数：关键词匹配
-// ==========================================
-static BOOL ContainsBlockKeyword(NSString *text) {
-    if (!text || text.length == 0) return NO;
-    NSString *lowerText = [text lowercaseString];
-    for (NSString *keyword in kBlockKeywords) {
-        if ([lowerText containsString:[keyword lowercaseString]]) {
+// 定义一个函数，用来判断字符串是否包含敏感词
+static BOOL isSensitiveString(NSString *str) {
+    if (!str) return NO;
+    NSArray *keywords = @[@"激活", @"授权", @"注册", @"正版", @"购买", @"续费", @"试用", @"过期", @"License", @"Activation"];
+    for (NSString *keyword in keywords) {
+        if ([str containsString:keyword]) {
             return YES;
         }
     }
@@ -33,86 +15,99 @@ static BOOL ContainsBlockKeyword(NSString *text) {
 }
 
 // ==========================================
-// 拦截策略 1：针对 SCLAlertView (第三方自定义弹窗)
+// 核心拦截逻辑
 // ==========================================
+
 %hook SCLAlertView
 
-// 拦截 show 方法：这是弹窗显示的必经之路
-- (SCLAlertViewResponder *)showTitle:(NSString *)title subTitle:(NSString *)subTitle {
-    // 检查标题或内容是否包含敏感词
-    if (ContainsBlockKeyword(title) || ContainsBlockKeyword(subTitle)) {
-        NSLog(@"[BlockPopup] 🚫 拦截 SCLAlertView: %@", title);
-        // 不调用 %orig，直接返回 nil，弹窗就不会出现
-        return nil;
+// 拦截 show 方法：这是弹窗显示的最后一步
+- (UIView *)show {
+    // 获取弹窗的标题或内容，检查是否包含敏感词
+    NSString *title = [self valueForKey:@"title"];
+    NSString *subTitle = [self valueForKey:@"subTitle"];
+
+    if (isSensitiveString(title) || isSensitiveString(subTitle)) {
+        NSLog(@"[Tweak] 发现敏感弹窗，已拦截: %@", title);
+        return nil; // 返回 nil，阻止弹窗显示
     }
+
+    return %orig; // 如果不是敏感弹窗，放行
+}
+
+// 拦截 showSuccess / showError 等快捷方法
+- (UIView *)showSuccess:(NSString *)title subTitle:(NSString *)subTitle closeButtonTitle:(NSString *)closeButtonTitle duration:(NSTimeInterval)duration {
+    if (isSensitiveString(title) || isSensitiveString(subTitle)) return nil;
     return %orig;
 }
 
-// 补漏：拦截其他可能的 show 方法
-- (SCLAlertViewResponder *)showSuccess:(NSString *)title subTitle:(NSString *)subTitle {
-    if (ContainsBlockKeyword(title) || ContainsBlockKeyword(subTitle)) return nil;
+- (UIView *)showError:(NSString *)title subTitle:(NSString *)subTitle closeButtonTitle:(NSString *)closeButtonTitle duration:(NSTimeInterval)duration {
+    if (isSensitiveString(title) || isSensitiveString(subTitle)) return nil;
     return %orig;
 }
 
-- (SCLAlertViewResponder *)showError:(NSString *)title subTitle:(NSString *)subTitle {
-    if (ContainsBlockKeyword(title) || ContainsBlockKeyword(subTitle)) return nil;
+- (UIView *)showNotice:(NSString *)title subTitle:(NSString *)subTitle closeButtonTitle:(NSString *)closeButtonTitle duration:(NSTimeInterval)duration {
+    if (isSensitiveString(title) || isSensitiveString(subTitle)) return nil;
     return %orig;
 }
 
-- (SCLAlertViewResponder *)showNotice:(NSString *)title subTitle:(NSString *)subTitle {
-    if (ContainsBlockKeyword(title) || ContainsBlockKeyword(subTitle)) return nil;
+- (UIView *)showWarning:(NSString *)title subTitle:(NSString *)subTitle closeButtonTitle:(NSString *)closeButtonTitle duration:(NSTimeInterval)duration {
+    if (isSensitiveString(title) || isSensitiveString(subTitle)) return nil;
     return %orig;
 }
 
-- (SCLAlertViewResponder *)showWarning:(NSString *)title subTitle:(NSString *)subTitle {
-    if (ContainsBlockKeyword(title) || ContainsBlockKeyword(subTitle)) return nil;
+- (UIView *)showInfo:(NSString *)title subTitle:(NSString *)subTitle closeButtonTitle:(NSString *)closeButtonTitle duration:(NSTimeInterval)duration {
+    if (isSensitiveString(title) || isSensitiveString(subTitle)) return nil;
     return %orig;
 }
 
-- (SCLAlertViewResponder *)showInfo:(NSString *)title subTitle:(NSString *)subTitle {
-    if (ContainsBlockKeyword(title) || ContainsBlockKeyword(subTitle)) return nil;
+- (UIView *)showEdit:(NSString *)title subTitle:(NSString *)subTitle closeButtonTitle:(NSString *)closeButtonTitle duration:(NSTimeInterval)duration {
+    if (isSensitiveString(title) || isSensitiveString(subTitle)) return nil;
     return %orig;
 }
 
-- (SCLAlertViewResponder *)showEdit:(NSString *)title subTitle:(NSString *)subTitle {
-    if (ContainsBlockKeyword(title) || ContainsBlockKeyword(subTitle)) return nil;
-    return %orig;
-}
-
-- (SCLAlertViewResponder *)showCustom:(NSString *)title subTitle:(NSString *)subTitle image:(UIImage *)image color:(UIColor *)color {
-    if (ContainsBlockKeyword(title) || ContainsBlockKeyword(subTitle)) return nil;
+- (UIView *)showCustom:(NSString *)title subTitle:(NSString *)subTitle image:(UIImage *)image color:(UIColor *)color closeButtonTitle:(NSString *)closeButtonTitle duration:(NSTimeInterval)duration {
+    if (isSensitiveString(title) || isSensitiveString(subTitle)) return nil;
     return %orig;
 }
 
 %end
 
 // ==========================================
-// 拦截策略 2：针对系统原生 UIAlertController
+// 兜底拦截：防止漏网之鱼
 // ==========================================
-%hook UIAlertController
 
-- (void)viewWillAppear:(BOOL)animated {
-    %orig;
-    // 再次检查，防止漏网
-    if (ContainsBlockKeyword(self.title) || ContainsBlockKeyword(self.message)) {
-        NSLog(@"[BlockPopup] 🚫 拦截系统弹窗: %@", self.title);
-        [self dismissViewControllerAnimated:NO completion:nil];
+%hook UIWindow
+
+// 拦截所有窗口的显示，但必须放过键盘和系统窗口
+- (void)makeKeyAndVisible {
+    NSString *windowClass = NSStringFromClass([self class]);
+
+    // 【白名单】如果是键盘或系统窗口，直接放行
+    if ([windowClass containsString:@"Keyboard"] ||
+        [windowClass containsString:@"UITextEffects"] ||
+        [windowClass containsString:@"UIRemote"] ||
+        [windowClass isEqualToString:@"UIWindow"]) {
+        %orig;
+        return;
     }
-}
 
-%end
-
-// ==========================================
-// 拦截策略 3：针对老式 UIAlertView
-// ==========================================
-%hook UIAlertView
-
-- (void)show {
-    if (ContainsBlockKeyword(self.title) || ContainsBlockKeyword(self.message)) {
-        NSLog(@"[BlockPopup] 🚫 拦截老式弹窗: %@", self.title);
-        return; // 不执行 %orig，直接不显示
+    // 检查窗口内的视图是否包含 SCLAlertView
+    BOOL hasSCLAlert = NO;
+    for (UIView *view in self.subviews) {
+        if ([NSStringFromClass([view class]) containsString:@"SCLAlertView"]) {
+            hasSCLAlert = YES;
+            break;
+        }
     }
-    %orig;
+
+    if (hasSCLAlert) {
+        NSLog(@"[Tweak] 发现 SCLAlertView 窗口，已拦截");
+        self.hidden = YES; // 隐藏窗口
+        self.alpha = 0;    // 透明化
+        return;            // 不调用 %orig，彻底阻止显示
+    }
+
+    %orig; // 其他窗口正常显示
 }
 
 %end
