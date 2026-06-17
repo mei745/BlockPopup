@@ -1,9 +1,9 @@
-Package: com.test.blockpopup
-Name: BlockPopup
-Version: 0.0.1
-Architecture: iphoneos-arm
-Description: Block third-party wechat plugin popups
+Package: com.vone.crack
+Name: VOne Crack
 Depends: mobilesubstrate
-Maintainer: Test
-Author: Test
+Version: 1.0
+Architecture: iphoneos-arm
+Description: Cracked version of w26527 by vone.
+Maintainer: vone
+Author: vone
 Section: Tweaks
