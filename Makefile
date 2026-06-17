@@ -1,21 +1,17 @@
-# 指定目标平台和架构
-TARGET := iphone:clang:latest:13.0
-ARCHS := arm64
+TARGET := iphone:clang:latest:7.0
+ARCHS = arm64 arm64e
+INSTALL_TARGET_PROCESSES = WeChat
 
-# 指定 Tweak 名称
-TWEAK_NAME = mei745
-
-# 指定要注入的进程
-mei745_INSTALL_TARGET_PROCESSES = SpringBoard
-
-# --- 关键修复：合并编译参数 ---
-# 必须把 -fobjc-arc 和 -Wno-deprecated-declarations 写在同一行
-# 否则后面的会覆盖前面的，导致修复失效
-mei745_CFLAGS = -fobjc-arc -Wno-deprecated-declarations
-
-# 指定源文件
-mei745_FILES = Tweak.xm
-
-# 引入构建规则
 include $(THEOS)/makefiles/common.mk
-include $(THEOS)/makefiles/tweak.mk
+
+TWEAK_NAME = vone
+
+vone_FILES = Tweak.xm
+# 【关键修改】添加 -I. 表示在当前目录寻找头文件，这样 #import "headers/xxx.h" 才能生效
+vone_CFLAGS = -fobjc-arc -I.
+vone_FRAMEWORKS = UIKit Foundation
+
+include $(THEOS_MAKE_PATH)/tweak.mk
+
+after-install::
+    install.exec "killall -9 WeChat"
