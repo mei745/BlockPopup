@@ -3,28 +3,48 @@
 #import <objc/runtime.h>
 
 // ==========================================
-// 核心配置：特征词库
+// 核心配置：特征词库与白名单
 // ==========================================
+
+// 黑名单：包含这些关键词的弹窗将被拦截
 static NSArray *kBlockKeywords = @[
     @"激活", @"授权", @"激活码", @"注册", @"正版", @"正版验证",
-    @"注意", @"微密友", @"盗版", @"更新", @"卡密",@"到期",
+    @"注意", @"微密友", @"盗版", @"更新", @"卡密", @"到期",
     @"插件", @"license", @"activation", @"key", @"破解",
     @"警告", @"提示", @"试用", @"购买", @"续费", @"过期",
     @"捐赠", @"赞助", @"PayPal", @"Alipay", @"WeChat Pay",
     @"售后", @"请输入您的授权", @"朕知道了", @"2440841046"
 ];
 
+// 白名单：即使包含黑名单关键词，但如果也包含白名单关键词，则放行
+// 这可以有效防止误杀正常的系统或应用弹窗，例如“是否确认...”
+static NSArray *kAllowKeywords = @[
+    @"是否"
+];
+
 // ==========================================
-// 工具函数：关键词匹配
+// 工具函数：智能关键词匹配
 // ==========================================
-static BOOL ContainsBlockKeyword(NSString *text) {
+static BOOL ShouldBlockText(NSString *text) {
     if (!text || text.length == 0) return NO;
+    
     NSString *lowerText = [text lowercaseString];
+    
+    // 1. 先检查白名单。如果命中白名单，直接放行（返回NO，表示不拦截）
+    for (NSString *keyword in kAllowKeywords) {
+        if ([lowerText containsString:[keyword lowercaseString]]) {
+            return NO;
+        }
+    }
+    
+    // 2. 再检查黑名单。如果命中黑名单，则拦截（返回YES）
     for (NSString *keyword in kBlockKeywords) {
         if ([lowerText containsString:[keyword lowercaseString]]) {
             return YES;
         }
     }
+    
+    // 3. 都没命中，不拦截
     return NO;
 }
 
@@ -36,7 +56,7 @@ static BOOL ContainsBlockKeyword(NSString *text) {
 // 1. 极致速度拦截：在初始化阶段直接杀掉
 - (instancetype)initWithTitle:(NSString *)title message:(NSString *)message preferredStyle:(UIAlertControllerStyle)preferredStyle {
     // 检查标题或内容是否包含敏感词
-    if (ContainsBlockKeyword(title) || ContainsBlockKeyword(message)) {
+    if (ShouldBlockText(title) || ShouldBlockText(message)) {
         NSLog(@"[BlockPopup] 🚫 极速拦截 (Init): %@", title ?: message);
         // 返回 nil，弹窗对象根本不会诞生
         return nil;
@@ -47,9 +67,10 @@ static BOOL ContainsBlockKeyword(NSString *text) {
 // 2. 补漏拦截：防止有些弹窗通过其他 init 方法创建
 - (void)viewWillAppear:(BOOL)animated {
     %orig;
-    // 再次检查，如果漏网了，立刻强制关闭
-    if (ContainsBlockKeyword(self.title) || ContainsBlockKeyword(self.message)) {
+    // 再次检查，如果漏网了，立刻强制关闭并从视图层级中移除
+    if (ShouldBlockText(self.title) || ShouldBlockText(self.message)) {
         [self dismissViewControllerAnimated:NO completion:nil];
+        [self.view removeFromSuperview];
     }
 }
 
@@ -61,7 +82,7 @@ static BOOL ContainsBlockKeyword(NSString *text) {
 %hook UIAlertView
 
 - (instancetype)initWithTitle:(NSString *)title message:(NSString *)message delegate:(id)delegate cancelButtonTitle:(NSString *)cancelButtonTitle otherButtonTitles:(NSString *)otherButtonTitles, ... {
-    if (ContainsBlockKeyword(title) || ContainsBlockKeyword(message)) {
+    if (ShouldBlockText(title) || ShouldBlockText(message)) {
         NSLog(@"[BlockPopup] 🚫 极速拦截 (Old Alert): %@", title ?: message);
         return nil;
     }
@@ -69,7 +90,7 @@ static BOOL ContainsBlockKeyword(NSString *text) {
 }
 
 - (void)show {
-    if (ContainsBlockKeyword(self.title) || ContainsBlockKeyword(self.message)) {
+    if (ShouldBlockText(self.title) || ShouldBlockText(self.message)) {
         return; // 不调用 %orig，直接不显示
     }
     %orig;
