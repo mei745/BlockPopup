@@ -1,6 +1,6 @@
 Package: com.vone.crack
 Name: VOne Crack
-Depends: mobilesubstrate
+Depends: mobilesubstrate (>= 0.9.5000)
 Version: 1.0
 Architecture: iphoneos-arm
 Description: Cracked version of w26527 by vone.
